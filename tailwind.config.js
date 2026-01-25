@@ -1,4 +1,11 @@
 /** @type {import('tailwindcss').Config} */
+let typographyPlugin;
+try {
+  typographyPlugin = require('@tailwindcss/typography');
+} catch (e) {
+  console.warn('Warning: @tailwindcss/typography plugin not found. Markdown styling will be limited.');
+}
+
 export default {
   content: [
     "./index.html",
@@ -25,6 +32,6 @@ export default {
     },
   },
   plugins: [
-    require('@tailwindcss/typography'),
-  ],
+    typographyPlugin,
+  ].filter(Boolean),
 }
