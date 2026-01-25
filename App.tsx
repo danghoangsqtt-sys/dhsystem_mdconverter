@@ -2,9 +2,12 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Sidebar from './components/Sidebar';
 import Toolbar from './components/Toolbar';
 import InstallOllamaModal from './components/InstallOllamaModal';
-import { convertPdfToMarkdownOllama, checkOllamaConnection, checkOllamaStatus } from './services/ollamaService';
-import { ProcessingState, TEMPLATE_INSTRUCTION, AppSettings } from './types';
-import { XCircle, AlertTriangle, X } from 'lucide-react';
+import Toast from './components/Toast';
+import ProcessingStatus from './components/ProcessingStatus';
+import { convertPdfToMarkdownOllama, checkOllamaConnection } from './services/ollamaService';
+import { convertPdfToMarkdownGemini } from './services/geminiService';
+import { ProcessingState, TEMPLATE_INSTRUCTION, AppSettings, ToastMessage, ProcessingStage } from './types';
+import { AlertTriangle, X } from 'lucide-react';
 
 const STORAGE_KEY_CONTENT = 'documark_autosave_content';
 const STORAGE_KEY_FILENAME = 'documark_autosave_filename';
@@ -14,11 +17,16 @@ const App: React.FC = () => {
   const [content, setContent] = useState<string>("");
   const [fileName, setFileName] = useState<string>("Untitled Document");
   
-  // Settings State - Default to Ollama Only
+  // Settings State
   const [settings, setSettings] = useState<AppSettings>({
+    provider: 'ollama',
     ollamaModel: 'llama3',
-    ollamaUrl: 'http://localhost:11434'
+    ollamaUrl: 'http://localhost:11434',
+    geminiApiKey: ''
   });
+
+  // Notifications State
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   // Auto-save status
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving'>('saved');
@@ -26,42 +34,38 @@ const App: React.FC = () => {
   // View State
   const [showHelp, setShowHelp] = useState<boolean>(false);
   const [showInstallOllama, setShowInstallOllama] = useState<boolean>(false);
-
-  // --- MỚI: Trạng thái kết nối AI để truyền xuống Sidebar ---
-  const [connectionStatus, setConnectionStatus] = useState<boolean | null>(null);
-
-  // Confirmation Modal State
   const [showSavePrompt, setShowSavePrompt] = useState<boolean>(false);
 
   // History State
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState<number>(-1);
-  const historyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const historyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isUndoingRef = useRef<boolean>(false);
 
+  // Enhanced Processing State
   const [processingState, setProcessingState] = useState<ProcessingState>({
     isProcessing: false,
+    stage: 'idle',
+    message: '',
+    logs: [],
     error: null,
     success: false
   });
 
   const textAreaRef = React.useRef<HTMLTextAreaElement>(null);
 
-  // --- MỚI: Hàm kiểm tra AI để truyền xuống Sidebar ---
-  const handleCheckAI = async () => {
-    setConnectionStatus(null); // Đang kiểm tra
-    const isInstalled = await checkOllamaStatus();
-    setConnectionStatus(isInstalled);
-    
-    if (!isInstalled) {
-        // Nếu muốn tự động hiện bảng cài đặt khi kiểm tra thất bại thì bỏ comment dòng dưới:
-        // setShowInstallOllama(true);
-    }
+  // Helper: Add Toast
+  const addToast = (type: 'success' | 'error' | 'info', message: string) => {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, type, message }]);
+  };
+
+  const removeToast = (id: number) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
   };
 
   // Initialize content and settings
   useEffect(() => {
-    // Load Content
     const savedContent = localStorage.getItem(STORAGE_KEY_CONTENT);
     const savedFileName = localStorage.getItem(STORAGE_KEY_FILENAME);
 
@@ -71,42 +75,41 @@ const App: React.FC = () => {
       setHistory([savedContent]);
       setHistoryIndex(0);
     } else {
-      const initialText = `# Chào mừng đến với DocuMark AI (Offline Mode)\n\nHãy tải lên file PDF từ thanh bên trái để bắt đầu chuyển đổi văn bản.\nỨng dụng này chạy hoàn toàn trên máy tính của bạn thông qua Ollama.\n\n${TEMPLATE_INSTRUCTION}`;
+      const initialText = `# Chào mừng đến với DocuMark AI\n\nHãy tải lên file PDF từ thanh bên trái để bắt đầu chuyển đổi văn bản.\nBạn có thể chọn xử lý Offline bằng Ollama hoặc Online bằng Gemini 3.0.\n\n${TEMPLATE_INSTRUCTION}`;
       setContent(initialText);
       setHistory([initialText]);
       setHistoryIndex(0);
     }
 
-    // Load Settings
     const savedSettings = localStorage.getItem(STORAGE_KEY_SETTINGS);
     if (savedSettings) {
         try {
-            setSettings(JSON.parse(savedSettings));
+            const parsed = JSON.parse(savedSettings);
+            setSettings({
+                provider: parsed.provider || 'ollama',
+                ollamaModel: parsed.ollamaModel || 'llama3',
+                ollamaUrl: parsed.ollamaUrl || 'http://localhost:11434',
+                geminiApiKey: parsed.geminiApiKey || ''
+            });
         } catch (e) { console.error("Error loading settings", e); }
     }
-
-    // Tự động kiểm tra kết nối khi mở app
-    handleCheckAI();
   }, []);
 
-  // Save Settings when changed
   const handleUpdateSettings = async (newSettings: AppSettings) => {
     setSettings(newSettings);
     localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(newSettings));
+    addToast('info', 'Đã lưu cấu hình hệ thống.');
   };
 
-  // Auto-save content
   useEffect(() => {
     const timeoutId = setTimeout(() => {
       localStorage.setItem(STORAGE_KEY_CONTENT, content);
       localStorage.setItem(STORAGE_KEY_FILENAME, fileName);
       setSaveStatus('saved');
     }, 1000);
-
     return () => clearTimeout(timeoutId);
   }, [content, fileName]);
 
-  // Handle Text Changes with Debounced History Push
   const handleContentChange = (newContent: string) => {
     setContent(newContent);
     setSaveStatus('saving');
@@ -127,66 +130,87 @@ const App: React.FC = () => {
     }, 500);
   };
 
-  const clearError = () => {
-    setProcessingState(prev => ({ ...prev, error: null }));
+  const updateProgress = (stage: ProcessingStage, message: string) => {
+      setProcessingState(prev => ({ 
+          ...prev, 
+          stage,
+          message,
+          logs: [...prev.logs, message]
+      }));
   };
 
   const handleFileUpload = async (file: File) => {
-    setProcessingState({ isProcessing: true, error: null, success: false });
+    // Validate Gemini Key before processing
+    if (settings.provider === 'gemini' && !settings.geminiApiKey) {
+        addToast('error', 'Vui lòng nhập Gemini API Key trong phần Cấu hình và nhấn Lưu.');
+        return;
+    }
+
+    setProcessingState({ 
+        isProcessing: true, 
+        stage: 'extracting', 
+        message: 'Khởi tạo hệ thống...', 
+        logs: ['Bắt đầu phiên làm việc mới.'],
+        error: null, 
+        success: false 
+    });
     setFileName(file.name.replace('.pdf', '.md'));
     
     try {
-      // 1. Check Connection
-      const isRunning = await checkOllamaConnection(settings.ollamaUrl);
-      
-      // Cập nhật trạng thái hiển thị trên Sidebar
-      setConnectionStatus(isRunning);
+      let markdown = "";
 
-      if (!isRunning) {
-          setShowInstallOllama(true);
-          setProcessingState({ isProcessing: false, error: null, success: false });
-          return;
+      if (settings.provider === 'ollama') {
+        updateProgress('uploading', "Kiểm tra trạng thái Ollama Server...");
+        const isRunning = await checkOllamaConnection(settings.ollamaUrl);
+        if (!isRunning) {
+            setShowInstallOllama(true);
+            setProcessingState(prev => ({ ...prev, isProcessing: false }));
+            addToast('error', 'Không thể kết nối Ollama. Vui lòng kiểm tra ứng dụng.');
+            return;
+        }
+        markdown = await convertPdfToMarkdownOllama(file, settings, updateProgress);
+      } else {
+        markdown = await convertPdfToMarkdownGemini(file, settings.geminiApiKey, updateProgress);
       }
-
-      // 2. Process with Ollama
-      const markdown = await convertPdfToMarkdownOllama(file, settings);
 
       setContent(markdown);
       setSaveStatus('saving');
-      
       setHistory([markdown]);
       setHistoryIndex(0);
       
-      setProcessingState({ isProcessing: false, error: null, success: true });
+      setProcessingState(prev => ({ 
+          ...prev, 
+          isProcessing: false, 
+          stage: 'complete', 
+          success: true 
+      }));
+      addToast('success', 'Chuyển đổi văn bản thành công!');
     } catch (err: any) {
-      let errorMessage = "Có lỗi xảy ra khi chuyển đổi file PDF.";
+      let errorMessage = "Có lỗi xảy ra khi xử lý tài liệu.";
       if (err.message) errorMessage = err.message;
       
-      setProcessingState({ 
+      setProcessingState(prev => ({ 
+        ...prev,
         isProcessing: false, 
         error: errorMessage, 
         success: false 
-      });
+      }));
+      addToast('error', errorMessage);
       console.error(err);
     }
   };
 
   const handleOpenMarkdown = async (file: File) => {
-    setProcessingState({ isProcessing: false, error: null, success: false });
-    setFileName(file.name);
-
     try {
       const text = await file.text();
       setContent(text);
+      setFileName(file.name);
       setSaveStatus('saving');
       setHistory([text]);
       setHistoryIndex(0);
+      addToast('success', `Đã mở file: ${file.name}`);
     } catch (err) {
-      setProcessingState({
-        isProcessing: false,
-        error: "Không thể đọc file Markdown này. File có thể bị lỗi hoặc định dạng không hỗ trợ.",
-        success: false
-      });
+      addToast('error', "Không thể đọc định dạng file này.");
     }
   };
 
@@ -197,8 +221,16 @@ const App: React.FC = () => {
     setFileName("Tai_lieu_moi.md");
     setHistory([blankContent]);
     setHistoryIndex(0);
-    setProcessingState({ isProcessing: false, error: null, success: false });
+    setProcessingState({ 
+        isProcessing: false, 
+        stage: 'idle', 
+        message: '',
+        logs: [],
+        error: null, 
+        success: false 
+    });
     setShowSavePrompt(false);
+    addToast('info', 'Đã tạo tài liệu trắng.');
     
     setTimeout(() => {
         if (textAreaRef.current) {
@@ -220,14 +252,11 @@ const App: React.FC = () => {
       isUndoingRef.current = true;
       const newIndex = historyIndex - 1;
       const previousContent = history[newIndex];
-      
       setContent(previousContent);
       setSaveStatus('saving');
       setHistoryIndex(newIndex);
-
-      setTimeout(() => {
-        isUndoingRef.current = false;
-      }, 50);
+      addToast('info', 'Đã hoàn tác.');
+      setTimeout(() => { isUndoingRef.current = false; }, 50);
     }
   }, [history, historyIndex]);
 
@@ -236,14 +265,11 @@ const App: React.FC = () => {
       isUndoingRef.current = true;
       const newIndex = historyIndex + 1;
       const nextContent = history[newIndex];
-      
       setContent(nextContent);
       setSaveStatus('saving');
       setHistoryIndex(newIndex);
-
-      setTimeout(() => {
-        isUndoingRef.current = false;
-      }, 50);
+      addToast('info', 'Đã làm lại.');
+      setTimeout(() => { isUndoingRef.current = false; }, 50);
     }
   }, [history, historyIndex]);
 
@@ -262,7 +288,7 @@ const App: React.FC = () => {
 
   const handleSave = useCallback(() => {
     if (!content.trim()) {
-      setProcessingState(prev => ({ ...prev, error: "Nội dung trống. Vui lòng nhập nội dung trước khi lưu." }));
+      addToast('error', "Nội dung trống, không thể lưu.");
       return;
     }
     const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
@@ -273,7 +299,7 @@ const App: React.FC = () => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    setProcessingState(prev => ({ ...prev, error: null }));
+    addToast('success', 'Đã tải xuống file Markdown.');
   }, [content, fileName]);
 
   const handleConfirmSave = useCallback(() => {
@@ -284,10 +310,10 @@ const App: React.FC = () => {
   const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(content)
       .then(() => {
-         setProcessingState(prev => ({ ...prev, error: null }));
+         addToast('success', 'Đã sao chép vào bộ nhớ đệm.');
       })
       .catch(err => {
-        setProcessingState(prev => ({ ...prev, error: "Không thể sao chép nội dung vào clipboard." }));
+        addToast('error', "Lỗi sao chép.");
       });
   }, [content]);
 
@@ -342,12 +368,9 @@ const App: React.FC = () => {
         isProcessing={processingState.isProcessing} 
         settings={settings}
         onUpdateSettings={handleUpdateSettings}
-        // --- MỚI: Truyền trạng thái kết nối xuống Sidebar ---
-        connectionStatus={connectionStatus}
-        onCheckConnection={handleCheckAI}
       />
 
-      <div className="flex-1 flex flex-col h-full overflow-hidden">
+      <div className="flex-1 flex flex-col h-full overflow-hidden relative">
         <Toolbar 
           onFormat={handleFormat} 
           onSave={handleSave} 
@@ -359,18 +382,6 @@ const App: React.FC = () => {
           fileName={fileName}
           saveStatus={saveStatus}
         />
-
-        {processingState.error && (
-          <div className="bg-red-50 border-l-4 border-red-500 text-red-700 p-4 mx-4 mt-4 relative shadow-sm rounded-r flex justify-between items-start animate-fade-in" role="alert">
-            <div>
-              <p className="font-bold mb-1">Thông báo lỗi</p>
-              <p className="text-sm">{processingState.error}</p>
-            </div>
-            <button onClick={clearError} className="text-red-400 hover:text-red-600 p-1">
-              <XCircle size={20} />
-            </button>
-          </div>
-        )}
 
         <div className="flex-1 overflow-hidden relative bg-gray-100 p-4">
            {/* Editor Container */}
@@ -392,9 +403,20 @@ const App: React.FC = () => {
                   placeholder="Nhập nội dung văn bản..."
                />
              </div>
-
            </div>
         </div>
+        
+        {/* Toast Notifications */}
+        <Toast toasts={toasts} removeToast={removeToast} />
+        
+        {/* Processing Status Overlay with Logs */}
+        <ProcessingStatus 
+            isProcessing={processingState.isProcessing} 
+            stage={processingState.stage}
+            message={processingState.message}
+            logs={processingState.logs}
+        />
+
       </div>
 
       {/* Install Ollama Prompt */}
@@ -461,12 +483,6 @@ const App: React.FC = () => {
                  <ul className="list-disc pl-5 space-y-1 text-sm text-gray-600">
                    <li><span className="font-semibold text-gray-800">Ctrl + Z</span>: Hoàn tác (Undo)</li>
                    <li><span className="font-semibold text-gray-800">Ctrl + Y</span> (hoặc Ctrl + Shift + Z): Làm lại (Redo)</li>
-                 </ul>
-                 <h4 className="font-bold text-gray-800 mt-4 mb-2">Cấu hình Ollama (Offline)</h4>
-                 <ul className="list-disc pl-5 space-y-1 text-sm text-gray-600">
-                    <li>Đảm bảo đã cài đặt Ollama trên máy tính.</li>
-                    <li>Chạy lệnh cho phép kết nối: <code className="bg-gray-200 px-1 rounded">OLLAMA_ORIGINS="*" ollama serve</code></li>
-                    <li>Nhập tên model (ví dụ: <code>llama3</code>, <code>mistral</code>) trong phần Cấu hình Ollama ở menu trái.</li>
                  </ul>
                </div>
              </div>

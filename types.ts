@@ -1,19 +1,33 @@
+export type ProcessingStage = 'idle' | 'extracting' | 'uploading' | 'generating' | 'formatting' | 'complete';
+
 export interface ProcessingState {
   isProcessing: boolean;
+  stage: ProcessingStage;
+  message: string;
+  logs: string[]; // Danh sách các thông báo chi tiết
   error: string | null;
   success: boolean;
 }
 
-// Removed 'gemini' provider type
+export type AIProvider = 'ollama' | 'gemini';
+
 export interface AppSettings {
+  provider: AIProvider;
   ollamaModel: string; // e.g., 'llama3', 'mistral', 'openhermes'
   ollamaUrl: string;   // e.g., 'http://localhost:11434'
+  geminiApiKey: string;
 }
 
 export interface DocumentData {
   fileName: string;
   content: string;
   lastModified: Date;
+}
+
+export interface ToastMessage {
+  id: number;
+  type: 'success' | 'error' | 'info';
+  message: string;
 }
 
 export const TEMPLATE_INSTRUCTION = `
