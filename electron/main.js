@@ -4,7 +4,6 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Ngăn chặn ứng dụng chạy nhiều lần
 const gotTheLock = app.requestSingleInstanceLock();
 
 if (!gotTheLock) {
@@ -17,19 +16,22 @@ if (!gotTheLock) {
       width: 1280,
       height: 800,
       show: false,
-      autoHideMenuBar: true, // Ẩn menu bar mặc định của Electron
-      icon: path.join(__dirname, '../public/icon.ico'), // Icon ứng dụng
+      autoHideMenuBar: true,
+      icon: path.join(__dirname, '../public/icon.ico'),
       webPreferences: {
         nodeIntegration: true,
-        contextIsolation: false, // Cho phép đơn giản hóa việc giao tiếp trong app local
-        webSecurity: false // Cho phép load local resources nếu cần thiết
+        contextIsolation: false,
+        webSecurity: false 
       }
     });
 
-    // Load nội dung ứng dụng
-    if (process.env.NODE_ENV === 'development') {
+    // Ép buộc kiểm tra môi trường phát triển
+    const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+
+    if (isDev) {
+      console.log('Chế độ: Development - Đang kết nối http://localhost:5173');
       mainWindow.loadURL('http://localhost:5173');
-      // mainWindow.webContents.openDevTools(); // Mở DevTools khi dev
+      mainWindow.webContents.openDevTools(); 
     } else {
       mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
     }
@@ -38,7 +40,12 @@ if (!gotTheLock) {
       mainWindow.show();
     });
 
-    // Mở các liên kết ngoài (ví dụ nút tải Ollama) bằng trình duyệt mặc định thay vì trong app
+    mainWindow.webContents.on('did-fail-load', () => {
+      if (isDev) {
+        setTimeout(() => mainWindow.loadURL('http://localhost:5173'), 1000);
+      }
+    });
+
     mainWindow.webContents.setWindowOpenHandler(({ url }) => {
       if (url.startsWith('https:')) {
         shell.openExternal(url);
@@ -48,17 +55,9 @@ if (!gotTheLock) {
     });
   };
 
-  app.whenReady().then(() => {
-    createWindow();
-
-    app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) createWindow();
-    });
-  });
+  app.whenReady().then(createWindow);
 
   app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') {
-      app.quit();
-    }
+    if (process.platform !== 'darwin') app.quit();
   });
 }

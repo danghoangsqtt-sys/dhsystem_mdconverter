@@ -14,7 +14,7 @@
     "electron:build": "tsc && vite build && tsc -p electron/tsconfig.json && electron-builder"
   },
   "dependencies": {
-    "@google/genai": "^0.1.2",
+    "@google/genai": "^1.38.0",
     "lucide-react": "^0.344.0",
     "pdfjs-dist": "^4.0.379",
     "react": "^18.2.0",
@@ -23,6 +23,7 @@
     "remark-gfm": "^4.0.0"
   },
   "devDependencies": {
+    "@tailwindcss/typography": "^0.5.19",
     "@types/react": "^18.2.64",
     "@types/react-dom": "^18.2.21",
     "@vitejs/plugin-react": "^4.2.1",
