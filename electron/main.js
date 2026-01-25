@@ -18,7 +18,7 @@ if (!gotTheLock) {
       height: 800,
       show: false,
       autoHideMenuBar: true, // Ẩn menu bar mặc định của Electron
-      icon: path.join(__dirname, '../public/vite.svg'), // Icon ứng dụng
+      icon: path.join(__dirname, '../public/icon.ico'), // Icon ứng dụng
       webPreferences: {
         nodeIntegration: true,
         contextIsolation: false, // Cho phép đơn giản hóa việc giao tiếp trong app local

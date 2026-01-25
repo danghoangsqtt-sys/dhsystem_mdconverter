@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Sidebar from './components/Sidebar';
 import Toolbar from './components/Toolbar';
 import InstallOllamaModal from './components/InstallOllamaModal';
-import { convertPdfToMarkdownOllama, checkOllamaConnection } from './services/ollamaService';
+import { convertPdfToMarkdownOllama, checkOllamaConnection, checkOllamaStatus } from './services/ollamaService';
 import { ProcessingState, TEMPLATE_INSTRUCTION, AppSettings } from './types';
 import { XCircle, AlertTriangle, X } from 'lucide-react';
 
@@ -27,6 +27,9 @@ const App: React.FC = () => {
   const [showHelp, setShowHelp] = useState<boolean>(false);
   const [showInstallOllama, setShowInstallOllama] = useState<boolean>(false);
 
+  // --- MỚI: Trạng thái kết nối AI để truyền xuống Sidebar ---
+  const [connectionStatus, setConnectionStatus] = useState<boolean | null>(null);
+
   // Confirmation Modal State
   const [showSavePrompt, setShowSavePrompt] = useState<boolean>(false);
 
@@ -43,6 +46,18 @@ const App: React.FC = () => {
   });
 
   const textAreaRef = React.useRef<HTMLTextAreaElement>(null);
+
+  // --- MỚI: Hàm kiểm tra AI để truyền xuống Sidebar ---
+  const handleCheckAI = async () => {
+    setConnectionStatus(null); // Đang kiểm tra
+    const isInstalled = await checkOllamaStatus();
+    setConnectionStatus(isInstalled);
+    
+    if (!isInstalled) {
+        // Nếu muốn tự động hiện bảng cài đặt khi kiểm tra thất bại thì bỏ comment dòng dưới:
+        // setShowInstallOllama(true);
+    }
+  };
 
   // Initialize content and settings
   useEffect(() => {
@@ -69,6 +84,9 @@ const App: React.FC = () => {
             setSettings(JSON.parse(savedSettings));
         } catch (e) { console.error("Error loading settings", e); }
     }
+
+    // Tự động kiểm tra kết nối khi mở app
+    handleCheckAI();
   }, []);
 
   // Save Settings when changed
@@ -120,6 +138,10 @@ const App: React.FC = () => {
     try {
       // 1. Check Connection
       const isRunning = await checkOllamaConnection(settings.ollamaUrl);
+      
+      // Cập nhật trạng thái hiển thị trên Sidebar
+      setConnectionStatus(isRunning);
+
       if (!isRunning) {
           setShowInstallOllama(true);
           setProcessingState({ isProcessing: false, error: null, success: false });
@@ -320,6 +342,9 @@ const App: React.FC = () => {
         isProcessing={processingState.isProcessing} 
         settings={settings}
         onUpdateSettings={handleUpdateSettings}
+        // --- MỚI: Truyền trạng thái kết nối xuống Sidebar ---
+        connectionStatus={connectionStatus}
+        onCheckConnection={handleCheckAI}
       />
 
       <div className="flex-1 flex flex-col h-full overflow-hidden">

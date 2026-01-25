@@ -2,6 +2,8 @@ import * as pdfjsLib from 'pdfjs-dist';
 
 // Sử dụng tính năng ?url của Vite để lấy đường dẫn file worker đã được bundle
 // Điều này sửa lỗi "Invalid URL" và đảm bảo file worker có sẵn khi đóng gói offline
+
+// @ts-ignore
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;

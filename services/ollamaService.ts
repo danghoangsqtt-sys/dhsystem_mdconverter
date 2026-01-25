@@ -1,6 +1,16 @@
 import { TEMPLATE_INSTRUCTION, AppSettings } from '../types';
 import { extractTextFromPdf } from './pdfService';
 
+// Thêm hàm này vào file services/ollamaService.ts
+export const checkOllamaStatus = async (): Promise<boolean> => {
+  try {
+    const response = await fetch('http://localhost:11434/api/tags');
+    return response.ok;
+  } catch (error) {
+    return false;
+  }
+};
+
 export const checkOllamaConnection = async (url: string): Promise<boolean> => {
   try {
     // Ollama root usually returns text "Ollama is running"
