@@ -4,13 +4,13 @@ import { extractTextFromPdf } from './pdfService';
 export const checkOllamaConnection = async (url: string): Promise<boolean> => {
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2000); 
+    const timeoutId = setTimeout(() => controller.abort(), 2000);
 
-    const response = await fetch(url, { 
+    const response = await fetch(url, {
       method: 'GET',
       signal: controller.signal
     });
-    
+
     clearTimeout(timeoutId);
     return response.ok;
   } catch (error) {
@@ -19,8 +19,8 @@ export const checkOllamaConnection = async (url: string): Promise<boolean> => {
 };
 
 export const convertPdfToMarkdownOllama = async (
-  file: File, 
-  settings: AppSettings, 
+  file: File,
+  settings: AppSettings,
   onUpdate: (stage: ProcessingStage, message: string) => void
 ): Promise<string> => {
   // 1. Extract text
@@ -33,38 +33,35 @@ export const convertPdfToMarkdownOllama = async (
   }
 
   if (!extractedText.trim()) {
-    throw new Error("File PDF không có nội dung văn bản (có thể là file ảnh scan). Ollama hiện chưa hỗ trợ OCR tốt.");
+    throw new Error("File PDF không có nội dung văn bản. Ollama chưa hỗ trợ OCR.");
   }
-  
+
   onUpdate('extracting', `Trích xuất hoàn tất. Độ dài: ${extractedText.length} ký tự.`);
 
-  // 2. Prepare Prompt
+  // 2. Prepare Prompt - CẬP NHẬT MẠNH MẼ
   const prompt = `
-    ĐÓNG VAI TRÒ: Bạn là một "Máy định dạng văn bản chính xác" (Precision Text Formatter).
-    NHIỆM VỤ: Chuyển đổi văn bản thô từ PDF sang định dạng Markdown, tuân thủ tuyệt đối nội dung gốc.
+    VAI TRÒ: Chuyên gia chuyển đổi dữ liệu.
+    NHIỆM VỤ: Đọc "DỮ LIỆU NGUỒN" và điền vào "KHUNG ĐỊNH DẠNG".
 
-    NGUYÊN TẮC BẤT KHẢ XÂM PHẠM (BẮT BUỘC):
-    1. GIỮ NGUYÊN VẸN NỘI DUNG: Không được tóm tắt, không được cắt bỏ, không được viết lại bất kỳ câu chữ nào của văn bản gốc.
-    2. CHÍNH XÁC TUYỆT ĐỐI: Giữ nguyên các số liệu, ngày tháng, tên riêng, điều khoản, số thứ tự.
-    3. KHÔNG SÁNG TẠO: Không thêm lời dẫn, không thêm nhận xét.
-    4. CẤU TRÚC: Sử dụng Template dưới đây để định hình cấu trúc.
-
-    TEMPLATE CẤU TRÚC:
+    QUY TẮC TUYỆT ĐỐI:
+    1. CHỈ sử dụng thông tin từ phần DỮ LIỆU NGUỒN bên dưới.
+    2. KHÔNG được bịa đặt thông tin.
+    3. KHÔNG lấy ví dụ từ template cũ.
+    
+    KHUNG ĐỊNH DẠNG:
     ${TEMPLATE_INSTRUCTION}
 
-    VĂN BẢN GỐC TỪ FILE PDF:
+    DỮ LIỆU NGUỒN (PDF):
     ${extractedText}
 
-    YÊU CẦU ĐẦU RA:
-    - Chỉ trả về nội dung Markdown.
-    - Không dùng code block (\`\`\`).
+    YÊU CẦU: Trả về Markdown raw.
   `;
 
   // 3. Call Ollama API
   try {
     onUpdate('uploading', `Đang kết nối tới Local Server (${settings.ollamaUrl})...`);
     onUpdate('generating', `Đang gửi yêu cầu tới model ${settings.ollamaModel}...`);
-    onUpdate('generating', "Quá trình này có thể mất vài phút tùy thuộc vào phần cứng...");
+    onUpdate('generating', "Quá trình này có thể mất vài phút...");
 
     const response = await fetch(`${settings.ollamaUrl}/api/generate`, {
       method: 'POST',
@@ -74,10 +71,10 @@ export const convertPdfToMarkdownOllama = async (
       body: JSON.stringify({
         model: settings.ollamaModel,
         prompt: prompt,
-        stream: false, 
+        stream: false,
         options: {
-            temperature: 0.1, 
-            num_ctx: 16384,   
+          temperature: 0.1, // Giảm sáng tạo để tăng độ chính xác
+          num_ctx: 16384,   // Tăng ngữ cảnh để đọc được văn bản dài
         }
       }),
     });
@@ -87,16 +84,16 @@ export const convertPdfToMarkdownOllama = async (
         throw new Error("Lỗi kết nối Ollama (CORS). Hãy chạy lệnh: OLLAMA_ORIGINS=\"*\" ollama serve");
       }
       if (response.status === 404) {
-         throw new Error(`Model '${settings.ollamaModel}' không tồn tại. Hãy chạy 'ollama pull ${settings.ollamaModel}'`);
+        throw new Error(`Model '${settings.ollamaModel}' không tồn tại. Hãy chạy 'ollama pull ${settings.ollamaModel}'`);
       }
       throw new Error(`Ollama Server Error: ${response.status} ${response.statusText}`);
     }
 
     onUpdate('formatting', "Đang nhận dữ liệu phản hồi...");
     const data = await response.json();
-    
+
     if (data.done === false) {
-       onUpdate('formatting', "Cảnh báo: Phản hồi chưa hoàn tất.");
+      onUpdate('formatting', "Cảnh báo: Phản hồi chưa hoàn tất.");
     }
 
     onUpdate('formatting', "Xử lý kết quả hoàn tất.");
@@ -105,7 +102,7 @@ export const convertPdfToMarkdownOllama = async (
   } catch (error: any) {
     console.error("Ollama Service Error:", error);
     if (error.message.includes("Failed to fetch")) {
-         throw new Error(`Không thể kết nối đến Ollama tại ${settings.ollamaUrl}. Đảm bảo ứng dụng Ollama đang chạy.`);
+      throw new Error(`Không thể kết nối đến Ollama tại ${settings.ollamaUrl}. Đảm bảo ứng dụng Ollama đang chạy.`);
     }
     throw error;
   }

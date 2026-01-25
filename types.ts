@@ -4,7 +4,7 @@ export interface ProcessingState {
   isProcessing: boolean;
   stage: ProcessingStage;
   message: string;
-  logs: string[]; // Danh sách các thông báo chi tiết
+  logs: string[];
   error: string | null;
   success: boolean;
 }
@@ -13,8 +13,8 @@ export type AIProvider = 'ollama' | 'gemini';
 
 export interface AppSettings {
   provider: AIProvider;
-  ollamaModel: string; // e.g., 'llama3', 'mistral', 'openhermes'
-  ollamaUrl: string;   // e.g., 'http://localhost:11434'
+  ollamaModel: string;
+  ollamaUrl: string;
   geminiApiKey: string;
 }
 
@@ -30,38 +30,34 @@ export interface ToastMessage {
   message: string;
 }
 
+// TEMPLATE_INSTRUCTION ĐÃ ĐƯỢC LÀM SẠCH HOÀN TOÀN DỮ LIỆU MẪU
 export const TEMPLATE_INSTRUCTION = `
-GHI CHÚ SOẠN THẢO (DÀNH CHO NGƯỜI VIẾT)
-# Tiêu đề lớn (tên văn bản)
-## Chương và các mục ngang cấp với chương
-### Tiểu mục cấp 1
-#### Tiểu mục cấp 2
-##### Tiểu mục cấp 3
-1. 2. 3. Danh sách có đánh số
-- Danh sách không đánh số
-**text** Nội dung bắt buộc / nhấn mạnh
-> Ghi chú
-ĐIỀU LỆNH QUẢN LÝ BỘ ĐỘI
-Tài liệu soạn thảo theo chuẩn Markdown
-Dùng cho tra cứu điều lệnh – điều lệ – quy định nội bộ
-METADATA VĂN BẢN
-Tên văn bản: [Tên văn bản từ PDF]
-Cơ quan ban hành: [Cơ quan]
-Số / ký hiệu: [Số hiệu]
-Ngày hiệu lực: [Ngày]
-Phạm vi áp dụng: [Phạm vi]
-Mức độ tài liệu: [Mức độ]
-CHƯƠNG I – [TÊN CHƯƠNG]
-Tiểu mục 1
-[Nội dung]
-Tiểu mục 2
-[Nội dung]
-CHƯƠNG II – [TÊN CHƯƠNG]
-[Tiếp tục cấu trúc tương tự]
-GIẢI THÍCH THUẬT NGỮ
-[Thuật ngữ]: [Định nghĩa]
-LƯU Ý
-[Các lưu ý nếu có]
-TÀI LIỆU LIÊN QUAN
-[Danh sách tài liệu liên quan]
+# [TIÊU ĐỀ VĂN BẢN CHÍNH XÁC TỪ FILE PDF]
+> [Mô tả loại văn bản, ví dụ: Thông tư / Nghị định / Quyết định]
+
+---
+
+## METADATA VĂN BẢN
+**Tên văn bản:** [Trích xuất chính xác tên đầy đủ]
+**Cơ quan ban hành:** [Trích xuất cơ quan ban hành]
+**Số / ký hiệu:** [Trích xuất số hiệu, ví dụ: 193/2011/TT-BQP]
+**Ngày hiệu lực:** [Trích xuất ngày tháng năm ban hành]
+**Phạm vi áp dụng:** [Trích xuất đối tượng áp dụng]
+
+---
+
+## NỘI DUNG CHI TIẾT
+[Trích xuất và trình bày lại toàn bộ các Chương, Điều, Khoản từ văn bản gốc. Giữ nguyên cấu trúc phân cấp]
+
+### [Tên Chương/Mục]
+#### [Tên Điều/Tiểu mục]
+- [Nội dung chi tiết...]
+
+---
+
+## GIẢI THÍCH THUẬT NGỮ
+[Nếu có, liệt kê theo định dạng: **Thuật ngữ**: Định nghĩa]
+
+## LƯU Ý / ĐIỀU KHOẢN THI HÀNH
+[Trích xuất các lưu ý hoặc hiệu lực thi hành]
 `;
