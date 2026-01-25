@@ -1,0 +1,5 @@
+{
+  "name": "DocuMark AI Editor",
+  "description": "A professional tool to convert PDF documents into structured Markdown using AI, featuring a Word-like editing interface and template-based formatting.",
+  "requestFramePermissions": []
+}
