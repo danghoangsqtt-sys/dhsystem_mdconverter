@@ -1,47 +1,75 @@
 import * as pdfjsLib from 'pdfjs-dist';
-// Giữ nguyên import worker cho Vite
+import Tesseract from 'tesseract.js';
+// Worker cho PDF.js trong Vite
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
 
+// Helper: Chuyển trang PDF thành ảnh để OCR
+const renderPageToImage = async (page: any): Promise<string> => {
+  const viewport = page.getViewport({ scale: 2.0 }); // Scale 2.0 để tăng độ nét cho OCR
+  const canvas = document.createElement('canvas');
+  const context = canvas.getContext('2d');
+
+  if (!context) return '';
+
+  canvas.height = viewport.height;
+  canvas.width = viewport.width;
+
+  await page.render({ canvasContext: context, viewport }).promise;
+  return canvas.toDataURL('image/png');
+};
+
+// Helper: Chạy OCR
+const performOCR = async (imageBase64: string, onStatus?: (status: string) => void): Promise<string> => {
+  try {
+    const { data: { text } } = await Tesseract.recognize(imageBase64, 'vie', {
+      logger: m => {
+        if (onStatus && m.status === 'recognizing text') {
+          onStatus(`OCR: ${(m.progress * 100).toFixed(0)}%`);
+        }
+      }
+    });
+    return text;
+  } catch (error) {
+    console.error("OCR Error:", error);
+    return "";
+  }
+};
+
 export const extractTextFromPdf = async (file: File, onProgress?: (msg: string) => void): Promise<string> => {
   try {
     const arrayBuffer = await file.arrayBuffer();
-    if (onProgress) onProgress(`Đang tải file ${file.name} (${(file.size / 1024).toFixed(0)} KB)...`);
+    if (onProgress) onProgress(`Đang tải file (${(file.size / 1024).toFixed(0)} KB)...`);
 
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-
-    if (onProgress) onProgress(`Đã mở PDF. Tổng số trang: ${pdf.numPages}`);
-
     let fullText = "";
 
     for (let i = 1; i <= pdf.numPages; i++) {
-      if (onProgress) onProgress(`Đang trích xuất văn bản trang ${i}/${pdf.numPages}...`);
+      if (onProgress) onProgress(`Đang xử lý trang ${i}/${pdf.numPages}...`);
 
       const page = await pdf.getPage(i);
       const textContent = await page.getTextContent();
 
-      // SỬA ĐỔI QUAN TRỌNG: Xử lý xuống dòng (EOL)
-      const pageText = textContent.items
-        .map((item: any) => {
-          // Kiểm tra thuộc tính hasEOL (End of Line)
-          // Thêm ký tự xuống dòng nếu là cuối dòng, ngược lại thêm khoảng trắng để tránh dính chữ
-          return item.hasEOL ? item.str + '\n' : item.str + ' ';
-        })
-        .join(''); // Join bằng chuỗi rỗng vì đã xử lý khoảng trắng ở trên
+      // 1. Thử lấy text layer (nhanh)
+      let pageText = textContent.items
+        .map((item: any) => item.hasEOL ? item.str + '\n' : item.str + ' ')
+        .join('');
 
-      // Basic check for scanned content
-      if (pageText.trim().length < 20) {
-        if (onProgress) onProgress(`Cảnh báo: Trang ${i} có rất ít văn bản, có thể là ảnh quét hoặc trang trắng.`);
+      // 2. Nếu ít chữ quá (< 50 ký tự) -> Khả năng là file Scan -> Bật OCR
+      if (pageText.trim().length < 50) {
+        if (onProgress) onProgress(`Trang ${i} là ảnh quét. Đang chạy OCR...`);
+        const img = await renderPageToImage(page);
+        const ocrText = await performOCR(img, (s) => onProgress && onProgress(`Trang ${i} ${s}`));
+        if (ocrText.trim().length > 0) pageText = ocrText;
       }
 
       fullText += `--- TRANG ${i} ---\n${pageText}\n\n`;
     }
 
-    if (onProgress) onProgress("Hoàn tất trích xuất dữ liệu thô.");
     return fullText;
   } catch (error) {
-    console.error("PDF Extraction Error:", error);
-    throw new Error("Không thể đọc nội dung file PDF. File có thể bị hỏng hoặc có mật khẩu.");
+    console.error("PDF Extract Error:", error);
+    throw new Error("Lỗi đọc PDF. File có thể bị hỏng hoặc có mật khẩu.");
   }
 };
