@@ -1,0 +1,20 @@
+openapi: 3.0.0
+info:
+  title: Markdown Converter API
+  version: 1.0.0
+paths:
+  /api/convert:
+    post:
+      summary: Upload file để chuyển đổi sang Markdown
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Thành công

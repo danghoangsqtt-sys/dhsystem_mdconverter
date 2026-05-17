@@ -1,0 +1,6 @@
+graph TD
+    UI[Frontend: React/Vite] -->|Upload File| API[Backend: FastAPI]
+    API --> Docling[Docling Engine]
+    Docling -->|Trả Markdown| API
+    API -->|Lưu File| Storage[Thư mục data/]
+    API -->|Trả phản hồi| UI
