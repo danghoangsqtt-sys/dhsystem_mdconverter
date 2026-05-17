@@ -8,8 +8,8 @@
 ## Phase 2: Frontend & UI Integration
 - [x] Khởi tạo Vite React App.
 - [x] Tích hợp Agentation.
-- [x] Xây dựng giao diện kéo thả file.
-- [x] Kết nối API upload và hiển thị/lưu Markdown.
+- [x] Hợp nhất giao diện DocuMark AI Editor chuyên nghiệp (sử dụng MDEditor).
+- [x] Kết nối Sidebar với API upload và hiển thị kết quả từ Docling.
 
 ## Phase 3: Packaging & Portability
 - [x] Tạo file `.bat` / `.ps1` để chạy nhanh hệ thống.

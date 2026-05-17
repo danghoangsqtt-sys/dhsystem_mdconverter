@@ -5,7 +5,6 @@ echo ===================================================
 
 cd /d "%~dp0"
 set PYTHON_EXE="docling-env\Scripts\python.exe"
-set PIP_EXE="docling-env\Scripts\pip.exe"
 
 echo [1/3] Checking Frontend build...
 if not exist "frontend\dist" (
@@ -19,7 +18,7 @@ if not exist "frontend\dist" (
 )
 
 echo [2/3] Checking Backend dependencies...
-%PIP_EXE% install -r backend\requirements.txt -q
+%PYTHON_EXE% -m pip install -r backend\requirements.txt -q
 
 echo [3/3] Starting System...
 echo ===================================================

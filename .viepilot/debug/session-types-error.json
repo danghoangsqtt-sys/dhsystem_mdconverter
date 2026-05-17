@@ -1,0 +1,37 @@
+{
+  "id": "debug-1715967000",
+  "status": "resolved",
+  "created_at": "2026-05-17T16:35:00Z",
+  "updated_at": "2026-05-17T16:40:00Z",
+  "problem": {
+    "description": "Uncaught SyntaxError: The requested module '/src/types.ts' does not provide an export named 'ToastMessage'",
+    "symptoms": ["Blank screen", "Console syntax error"],
+    "error_messages": ["SyntaxError: The requested module '/src/types.ts' does not provide an export named 'ToastMessage'"],
+    "affected_files": ["frontend/src/components/Toast.tsx", "frontend/src/components/ProcessingStatus.tsx", "frontend/src/App.tsx"]
+  },
+  "investigation": {
+    "hypotheses": [
+      {
+        "id": 1,
+        "description": "Vite/esbuild leaves import { Type } from './types' in JS bundle because isolatedModules cannot infer it's a type-only export.",
+        "status": "confirmed"
+      }
+    ],
+    "tests_run": [],
+    "findings": [
+      "types.ts contains only TypeScript types and interfaces.",
+      "Vite transpiles types.ts to an empty Javascript file.",
+      "Importing a type as a value (without 'type' keyword) makes the browser try to find the variable in the empty JS file at runtime, causing a SyntaxError."
+    ]
+  },
+  "resolution": {
+    "root_cause": "Missing 'type' keyword in imports from types.ts, causing esbuild to transpile them as value imports.",
+    "fix_applied": "Changed `import { ToastMessage }` to `import type { ToastMessage }` in Toast.tsx, ProcessingStatus.tsx, and App.tsx.",
+    "files_changed": [
+      "frontend/src/components/Toast.tsx",
+      "frontend/src/components/ProcessingStatus.tsx",
+      "frontend/src/App.tsx"
+    ],
+    "verification": "Restarted Vite dev server with --force and verified no unhandled errors appear in the console."
+  }
+}
