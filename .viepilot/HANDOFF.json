@@ -1,11 +1,16 @@
 {
-  "current_phase": 1,
-  "completed_tasks": [],
-  "in_progress_tasks": [
-    "Crystallize project structure"
+  "current_phase": 2,
+  "completed_tasks": [
+    "Crystallize project structure",
+    "Thiết lập thư mục cấu trúc chuẩn (backend, data)",
+    "Khởi tạo Backend FastAPI",
+    "Tích hợp API xử lý docling chuyển đổi file PDF/DOCX thành Markdown"
   ],
+  "in_progress_tasks": [],
   "next_tasks": [
-    "Kh\u1edfi t\u1ea1o Backend FastAPI",
-    "Thi\u1ebft l\u1eadp th\u01b0 m\u1ee5c data/"
+    "Khởi tạo Vite React App",
+    "Tích hợp Agentation vào Frontend",
+    "Xây dựng giao diện kéo thả file",
+    "Kết nối API upload và hiển thị Markdown"
   ]
 }

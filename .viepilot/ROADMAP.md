@@ -1,9 +1,9 @@
 # Lộ Trình Phát Triển (Roadmap)
 
 ## Phase 1: Foundation & Backend Core
-- [ ] Thiết lập thư mục cấu trúc chuẩn (`backend/`, `frontend/`, `data/`).
-- [ ] Viết API Backend bằng FastAPI.
-- [ ] Tích hợp API xử lý `docling` chuyển đổi file PDF/DOCX thành Markdown.
+- [x] Thiết lập thư mục cấu trúc chuẩn (`backend/`, `frontend/`, `data/`).
+- [x] Viết API Backend bằng FastAPI.
+- [x] Tích hợp API xử lý `docling` chuyển đổi file PDF/DOCX thành Markdown.
 
 ## Phase 2: Frontend & UI Integration
 - [ ] Khởi tạo Vite React App.
