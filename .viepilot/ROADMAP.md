@@ -12,5 +12,5 @@
 - [x] Kết nối API upload và hiển thị/lưu Markdown.
 
 ## Phase 3: Packaging & Portability
-- [ ] Tạo file `.bat` / `.ps1` để chạy nhanh hệ thống.
-- [ ] Đóng gói phục vụ tính portable.
+- [x] Tạo file `.bat` / `.ps1` để chạy nhanh hệ thống.
+- [x] Đóng gói phục vụ tính portable.

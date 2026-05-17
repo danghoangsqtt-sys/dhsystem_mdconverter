@@ -23,11 +23,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from fastapi.staticfiles import StaticFiles
+
 # Define directories
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 DATA_DIR = BASE_DIR / "data"
 UPLOAD_DIR = DATA_DIR / "uploads"
 OUTPUT_DIR = DATA_DIR / "outputs"
+FRONTEND_DIST_DIR = BASE_DIR / "frontend" / "dist"
 
 # Ensure directories exist
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -85,3 +88,7 @@ async def download_file(job_id: str):
         filename=f"{job_id}.md", 
         media_type="text/markdown"
     )
+
+# Serve static frontend files if they exist (for production/portable mode)
+if os.path.exists(FRONTEND_DIST_DIR):
+    app.mount("/", StaticFiles(directory=FRONTEND_DIST_DIR, html=True), name="frontend")

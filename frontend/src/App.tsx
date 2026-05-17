@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { Upload, FileText, Loader2, Download, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Upload, Loader2, Download, CheckCircle2, AlertCircle } from 'lucide-react';
 import { Agentation } from 'agentation';
-import { uploadAndConvertFile, ConversionResponse } from './services/api';
+import { uploadAndConvertFile, type ConversionResponse } from './services/api';
 import './App.css';
 
 function App() {

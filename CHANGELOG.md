@@ -2,6 +2,8 @@
 Tất cả các thay đổi của dự án sẽ được cập nhật tại đây.
 
 ## [Unreleased]
+- **System:** Đóng gói hoàn chỉnh thành hệ thống Portable, có thể chia sẻ không cần cài đặt.
+- **System:** Cung cấp script `start.bat` để chạy ứng dụng 1-click (frontend được serve qua FastAPI tĩnh).
 - **Frontend:** Thiết kế giao diện Drag-and-Drop file trực quan, tối giản chuyên nghiệp (chuẩn Luxury Blue/Neutral).
 - **Frontend:** Tích hợp `agentation` giúp gỡ lỗi UI dễ dàng hơn.
 - **Frontend:** Kết nối API tải và hiển thị file kết quả (Markdown Preview) trực tiếp từ `docling`.

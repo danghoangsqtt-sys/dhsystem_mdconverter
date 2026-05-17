@@ -1,5 +1,5 @@
 {
-  "current_phase": 3,
+  "current_phase": 4,
   "completed_tasks": [
     "Crystallize project structure",
     "Thiết lập thư mục cấu trúc chuẩn (backend, data)",
@@ -8,11 +8,10 @@
     "Khởi tạo Vite React App",
     "Tích hợp Agentation vào Frontend",
     "Xây dựng giao diện kéo thả file",
-    "Kết nối API upload và hiển thị Markdown"
+    "Kết nối API upload và hiển thị Markdown",
+    "Tạo file start.bat để chạy nhanh hệ thống",
+    "Đóng gói phục vụ tính portable"
   ],
   "in_progress_tasks": [],
-  "next_tasks": [
-    "Tạo file .bat / .ps1 để chạy nhanh hệ thống",
-    "Đóng gói phục vụ tính portable"
-  ]
+  "next_tasks": []
 }
