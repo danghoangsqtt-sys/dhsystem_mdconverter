@@ -1,16 +1,18 @@
 {
-  "current_phase": 2,
+  "current_phase": 3,
   "completed_tasks": [
     "Crystallize project structure",
     "Thiết lập thư mục cấu trúc chuẩn (backend, data)",
     "Khởi tạo Backend FastAPI",
-    "Tích hợp API xử lý docling chuyển đổi file PDF/DOCX thành Markdown"
-  ],
-  "in_progress_tasks": [],
-  "next_tasks": [
+    "Tích hợp API xử lý docling chuyển đổi file PDF/DOCX thành Markdown",
     "Khởi tạo Vite React App",
     "Tích hợp Agentation vào Frontend",
     "Xây dựng giao diện kéo thả file",
     "Kết nối API upload và hiển thị Markdown"
+  ],
+  "in_progress_tasks": [],
+  "next_tasks": [
+    "Tạo file .bat / .ps1 để chạy nhanh hệ thống",
+    "Đóng gói phục vụ tính portable"
   ]
 }
