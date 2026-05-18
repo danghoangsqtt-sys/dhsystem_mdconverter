@@ -82,20 +82,38 @@ const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       <div className="flex-1 overflow-y-auto py-2 px-2 custom-scrollbar space-y-1">
-        <div className="px-2 py-2 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Features</div>
-        <SidebarItem icon={FilePlus} label="New Document" onClick={onNewDocument} />
-        <SidebarItem icon={FolderOpen} label="Open Markdown" onClick={() => mdInputRef.current?.click()} />
-        <SidebarItem icon={RefreshCcw} label="Reprocess PDF" disabled={isProcessing} onClick={() => pdfInputRef.current?.click()} />
+        <div className="px-2 py-2 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Chức năng</div>
+        <SidebarItem icon={FilePlus} label="Tài liệu mới" onClick={onNewDocument} />
+        <SidebarItem icon={FolderOpen} label="Mở file Markdown" onClick={() => mdInputRef.current?.click()} />
         <div className="mt-2 pt-2 border-t border-gray-100">
-           <SidebarItem icon={HelpCircle} label="Hướng dẫn" onClick={onShowHelp} />
+           <SidebarItem icon={HelpCircle} label="Hướng dẫn sử dụng" onClick={onShowHelp} />
         </div>
       </div>
 
-      <div className="p-4 border-t border-gray-200">
-        <div className="bg-gray-100 rounded p-3 text-xs text-gray-600">
-          <p className="font-bold mb-1">DocuMark AI Web</p>
-          <p className="mb-2">Phiên bản 3.0.0 (FastAPI)</p>
-          <p className="text-gray-400 font-semibold border-t border-gray-200 pt-2 mt-2">© dhsystem 2026</p>
+      {/* ─── Publisher Info ─── */}
+      <div className="p-3 border-t border-gray-200">
+        <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg p-3 text-xs text-gray-600 space-y-2">
+          <div className="flex items-center space-x-2">
+            <div className="w-7 h-7 bg-blue-600 rounded-md flex items-center justify-center flex-shrink-0">
+              <span className="text-white font-bold text-[10px]">DH</span>
+            </div>
+            <div>
+              <p className="font-bold text-gray-800 leading-tight">DocuMark AI</p>
+              <p className="text-[10px] text-gray-400">Phiên bản 1.0.0</p>
+            </div>
+          </div>
+          
+          <div className="space-y-1 text-[10px] text-gray-500 border-t border-gray-200 pt-2">
+            <p><span className="font-semibold text-gray-600">Engine:</span> Docling AI + TableFormer</p>
+            <p><span className="font-semibold text-gray-600">Hỗ trợ:</span> PDF, DOCX, PPTX, HTML</p>
+            <p><span className="font-semibold text-gray-600">Chế độ:</span> Offline — xử lý cục bộ</p>
+          </div>
+
+          <div className="border-t border-gray-200 pt-2">
+            <p className="text-[10px] font-semibold text-gray-500">Nhà phát triển</p>
+            <p className="font-bold text-blue-700 text-[11px]">DHSystem</p>
+            <p className="text-[10px] text-gray-400">© 2026 DHSystem. All rights reserved.</p>
+          </div>
         </div>
       </div>
     </div>
