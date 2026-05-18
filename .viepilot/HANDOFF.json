@@ -1,44 +1,32 @@
 {
-  "version": "1.1",
-  "timestamp": "2026-05-18",
-  "project": "DocuMark AI Editor",
-  "status": "in_progress",
-  "current_phase": 4,
-  "current_phase_name": "Fix DOCX Table Content Loss",
-  "next_action": "User runs acceptance test: convert DOCX file with merged-cell tables (e.g. IoT course syllabus) → verify all table content appears in markdown output.",
-  "recent_fixes": [
-    "markdown_cleaner.py _clean_tables(): fallback now extends original table_lines instead of silently dropping",
-    "markdown_cleaner.py _table_to_structured_list(): sub-header heuristic — requires ALL non-empty cells to be bold (was 70%)",
-    "markdown_cleaner.py _count_empty_columns(): now checks all rows including header row",
-    "docling_service.py: added InputFormat.DOCX: WordFormatOption() with pipeline explanation comment"
+  "version": "1.0",
+  "timestamp": "2026-05-18T14:24:00+07:00",
+  "phase": "UI Polish & Bug Fixes",
+  "phase_name": "UI Polish & Bug Fixes",
+  "task": "Sidebar enhancements",
+  "total_tasks": "N/A",
+  "status": "paused",
+  "completed_tasks": [
+    "Fixed MDEditor ghost text bug (EPIPE in packaged app)",
+    "Enhanced Sidebar with Publisher Info",
+    "Removed redundant Reprocess PDF button",
+    "Built and packaged version 1.0.0"
   ],
-  "phases": {
-    "1": { "name": "Foundation & Backend Core", "status": "complete" },
-    "2": { "name": "Frontend & UI Integration", "status": "complete" },
-    "3": { "name": "Packaging & Portability", "status": "complete" },
-    "4": { "name": "Fix DOCX Table Content Loss", "status": "in_progress", "progress": "4/5 tasks done" },
-    "5": { "name": "Improve PDF Markdown Quality", "status": "pending" },
-    "6": { "name": "Fix UX Processing Status", "status": "pending" },
-    "7": { "name": "SSE Real-time Streaming", "status": "backlog" }
-  },
-  "key_files": {
-    "docling_config": "backend/src/services/docling_service.py",
-    "markdown_postprocess": "backend/src/services/markdown_cleaner.py",
-    "api": "backend/src/main.py",
-    "frontend_types": "frontend/src/types.ts",
-    "processing_ui": "frontend/src/components/ProcessingStatus.tsx",
-    "frontend_api": "frontend/src/services/api.ts"
-  },
-  "open_questions": [
-    "Giữ nguyên 4 bước Stepper hay thay đổi số bước cho phù hợp thực tế?",
-    "Sau khi fix, nếu bảng DOCX vẫn xấu, giữ markdown gốc hay convert structured list với logic tốt hơn?",
-    "File DOCX/PDF test nào cần dùng ngoài đề cương IoT?"
+  "remaining_tasks": [
+    "Wait for user testing and feedback on the latest build"
+  ],
+  "blockers": [],
+  "human_actions_pending": [
+    "User needs to test the newly packaged DocuMark AI Setup 1.0.0.exe"
   ],
   "decisions": [
-    "asar: false — Chromium renderer cannot load file:// from inside asar archives",
-    "TableFormerMode.ACCURATE — quality over speed for academic documents",
-    "WordFormatOption DOCX — SimplePipeline + MsWordDocumentBackend, no ML needed",
-    "Never drop content silently — markdown_cleaner fallbacks must preserve original",
-    "Simulated progress (Phase 6) before real SSE (Phase 7) — faster to ship"
-  ]
+    "Disabled MDEditor highlightEnable=false to fix Tailwind CSS Preflight conflict",
+    "Replaced console.error with safeLog to prevent EPIPE crashes in packaged Electron",
+    "Added detailed DHSystem branding to the Sidebar for a more professional look"
+  ],
+  "uncommitted_files": [
+    "frontend/src/main.tsx"
+  ],
+  "next_action": "Check user feedback after testing the new build",
+  "context_notes": "We just finished major UI bug fixes (ghost text) and crashing bugs (EPIPE) for the Electron packaged app. The app successfully compiled into a release setup. Waiting for the user to try the setup."
 }
