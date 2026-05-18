@@ -64,8 +64,6 @@
   text-rendering: auto !important;
   -webkit-font-smoothing: antialiased !important;
   -moz-osx-font-smoothing: grayscale !important;
-  padding: 0 !important;
-  margin: 0 !important;
   box-sizing: border-box !important;
 }
 
