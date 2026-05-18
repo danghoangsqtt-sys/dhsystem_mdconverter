@@ -1,37 +1,44 @@
 {
-  "version": "1.0",
-  "timestamp": "2026-05-18T07:34:00+07:00",
+  "version": "1.1",
+  "timestamp": "2026-05-18",
   "project": "DocuMark AI Editor",
-  "status": "paused",
-  "phase": "Electron Desktop App Migration",
-  "completed_tasks": [
-    "Rebranded UI from Docling FastAPI to DocuMark AI Core",
-    "Generated custom logo and favicon",
-    "Refactored App.tsx with useReducer for state management",
-    "Fixed Vite import type errors",
-    "Installed Electron + electron-builder + vite-plugin-electron",
-    "Created electron/main.ts with Python backend auto-spawn",
-    "Created electron/preload.ts",
-    "Configured vite.config.ts with electron plugin",
-    "Fixed ENOENT path error in packaged mode (process.execPath)",
-    "Fixed 'Not allowed to load local resource' by disabling asar",
-    "Separated electron-builder output to release/ directory",
-    "Updated .gitignore to exclude large binaries",
-    "Pushed all source code to GitHub"
+  "status": "in_progress",
+  "current_phase": 4,
+  "current_phase_name": "Fix DOCX Table Content Loss",
+  "next_action": "User runs acceptance test: convert DOCX file with merged-cell tables (e.g. IoT course syllabus) → verify all table content appears in markdown output.",
+  "recent_fixes": [
+    "markdown_cleaner.py _clean_tables(): fallback now extends original table_lines instead of silently dropping",
+    "markdown_cleaner.py _table_to_structured_list(): sub-header heuristic — requires ALL non-empty cells to be bold (was 70%)",
+    "markdown_cleaner.py _count_empty_columns(): now checks all rows including header row",
+    "docling_service.py: added InputFormat.DOCX: WordFormatOption() with pipeline explanation comment"
   ],
-  "remaining_tasks": [
-    "Verify packaged app opens correctly on Desktop (user needs to test)",
-    "Optional: Add custom .ico icon for Windows taskbar",
-    "Optional: Export to PDF feature"
+  "phases": {
+    "1": { "name": "Foundation & Backend Core", "status": "complete" },
+    "2": { "name": "Frontend & UI Integration", "status": "complete" },
+    "3": { "name": "Packaging & Portability", "status": "complete" },
+    "4": { "name": "Fix DOCX Table Content Loss", "status": "in_progress", "progress": "4/5 tasks done" },
+    "5": { "name": "Improve PDF Markdown Quality", "status": "pending" },
+    "6": { "name": "Fix UX Processing Status", "status": "pending" },
+    "7": { "name": "SSE Real-time Streaming", "status": "backlog" }
+  },
+  "key_files": {
+    "docling_config": "backend/src/services/docling_service.py",
+    "markdown_postprocess": "backend/src/services/markdown_cleaner.py",
+    "api": "backend/src/main.py",
+    "frontend_types": "frontend/src/types.ts",
+    "processing_ui": "frontend/src/components/ProcessingStatus.tsx",
+    "frontend_api": "frontend/src/services/api.ts"
+  },
+  "open_questions": [
+    "Giữ nguyên 4 bước Stepper hay thay đổi số bước cho phù hợp thực tế?",
+    "Sau khi fix, nếu bảng DOCX vẫn xấu, giữ markdown gốc hay convert structured list với logic tốt hơn?",
+    "File DOCX/PDF test nào cần dùng ngoài đề cương IoT?"
   ],
-  "blockers": [],
   "decisions": [
     "asar: false — Chromium renderer cannot load file:// from inside asar archives",
-    "Output directory: release/ to avoid conflict with Vite's dist/",
-    "Python path: uses process.execPath in packaged mode to navigate back to project root",
-    "API_BASE_URL hardcoded to http://127.0.0.1:8000/api for Electron compatibility"
-  ],
-  "uncommitted_files": [],
-  "next_action": "User tests the Desktop shortcut 'DocuMark AI'. If it opens correctly with white page, check console for errors. If working, the project is complete.",
-  "context_notes": "Three iterations of Electron packaging bugs were fixed: 1) ENOENT (wrong Python path), 2) asar file:// loading blocked by Chromium, 3) GitHub push rejected due to large binaries. All code is now on GitHub master branch."
+    "TableFormerMode.ACCURATE — quality over speed for academic documents",
+    "WordFormatOption DOCX — SimplePipeline + MsWordDocumentBackend, no ML needed",
+    "Never drop content silently — markdown_cleaner fallbacks must preserve original",
+    "Simulated progress (Phase 6) before real SSE (Phase 7) — faster to ship"
+  ]
 }

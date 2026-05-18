@@ -1,0 +1,12 @@
+graph LR
+    PDF -->|PdfFormatOption| PDFPipeline[PaginatedPipeline]
+    PDFPipeline -->|TableFormerMode.ACCURATE| TableML[ML Table Recognition]
+    TableML -->|do_cell_matching=True| MergedCells[Merged Cell Handling]
+
+    DOCX -->|WordFormatOption| DOCXPipeline[SimplePipeline]
+    DOCXPipeline -->|MsWordDocumentBackend| OOXML[Direct OOXML XML Parsing]
+
+    MergedCells --> Document[Docling Document Model]
+    OOXML --> Document
+    Document -->|export_to_markdown| RawMarkdown[Raw Markdown]
+    RawMarkdown --> Cleaner[markdown_cleaner.py]

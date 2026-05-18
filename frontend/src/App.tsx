@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback, useReducer } from 'react';
+import React, { useEffect, useCallback, useReducer, useRef } from 'react';
 import MDEditor from '@uiw/react-md-editor';
 import { Agentation } from 'agentation';
 import Sidebar from './components/Sidebar';
@@ -47,7 +47,8 @@ const initialState: AppState = {
     message: '',
     logs: [],
     error: null,
-    success: false
+    success: false,
+    uploadProgress: 0
   }
 };
 
@@ -89,8 +90,38 @@ function appReducer(state: AppState, action: AppAction): AppState {
   }
 }
 
+// Simulated processing log messages for each stage
+const STAGE_LOGS: Record<string, string[]> = {
+  uploading: [
+    'Đang tải file lên máy chủ DocuMark AI...',
+  ],
+  extracting: [
+    'Đã nhận file thành công.',
+    'Đang phân tích bố cục trang (Layout Analysis)...',
+    'Nhận diện vùng text, hình ảnh, bảng biểu...',
+  ],
+  generating: [
+    'Đang chạy TableFormer ACCURATE mode...',
+    'Phân tích cấu trúc bảng, merged cells...',
+    'Trích xuất nội dung văn bản & công thức...',
+  ],
+  formatting: [
+    'Đang tạo Markdown từ cấu trúc tài liệu...',
+    'Post-processing: Tối ưu bảng, loại bỏ cột rỗng...',
+    'Kiểm tra & định dạng kết quả cuối cùng...',
+  ],
+};
+
+const STAGE_MESSAGES: Record<string, string> = {
+  uploading: 'Đang tải file lên server...',
+  extracting: 'Đang đọc PDF & phân tích bố cục...',
+  generating: 'Đang nhận diện bảng & trích xuất nội dung...',
+  formatting: 'Đang tạo & định dạng Markdown...',
+};
+
 const App: React.FC = () => {
   const [state, dispatch] = useReducer(appReducer, initialState);
+  const stageTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   const addToast = useCallback((type: 'success' | 'error' | 'info', message: string) => {
     dispatch({ type: 'ADD_TOAST', payload: { id: Date.now(), type, message } });
@@ -98,6 +129,12 @@ const App: React.FC = () => {
 
   const removeToast = useCallback((id: number) => {
     dispatch({ type: 'REMOVE_TOAST', payload: id });
+  }, []);
+
+  // Clear all stage simulation timers
+  const clearStageTimers = useCallback(() => {
+    stageTimersRef.current.forEach(t => clearTimeout(t));
+    stageTimersRef.current = [];
   }, []);
 
   useEffect(() => {
@@ -131,38 +168,149 @@ const App: React.FC = () => {
     dispatch({ type: 'SET_CONTENT', payload: newContent });
   }, []);
 
+  /**
+   * Start simulated progress stages after upload completes.
+   * Each stage adds log messages with timed intervals,
+   * giving users visual feedback while the backend processes.
+   * When the actual API response arrives, we jump to 'complete'.
+   */
+  const startSimulatedProgress = useCallback(() => {
+    clearStageTimers();
+    let cumulativeDelay = 0;
+
+    // Stage: extracting — starts immediately after upload
+    cumulativeDelay += 500;
+    const t1 = setTimeout(() => {
+      dispatch({
+        type: 'SET_PROCESSING_STATE',
+        payload: {
+          stage: 'extracting',
+          message: STAGE_MESSAGES.extracting,
+          logs: [...STAGE_LOGS.uploading, ...STAGE_LOGS.extracting.slice(0, 1)]
+        }
+      });
+    }, cumulativeDelay);
+
+    // Add more extracting logs
+    cumulativeDelay += 2000;
+    const t1b = setTimeout(() => {
+      dispatch({
+        type: 'SET_PROCESSING_STATE',
+        payload: {
+          logs: [...STAGE_LOGS.uploading, ...STAGE_LOGS.extracting]
+        }
+      });
+    }, cumulativeDelay);
+
+    // Stage: generating — after 5s
+    cumulativeDelay += 3000;
+    const t2 = setTimeout(() => {
+      dispatch({
+        type: 'SET_PROCESSING_STATE',
+        payload: {
+          stage: 'generating',
+          message: STAGE_MESSAGES.generating,
+          logs: [...STAGE_LOGS.uploading, ...STAGE_LOGS.extracting, ...STAGE_LOGS.generating.slice(0, 1)]
+        }
+      });
+    }, cumulativeDelay);
+
+    cumulativeDelay += 3000;
+    const t2b = setTimeout(() => {
+      dispatch({
+        type: 'SET_PROCESSING_STATE',
+        payload: {
+          logs: [...STAGE_LOGS.uploading, ...STAGE_LOGS.extracting, ...STAGE_LOGS.generating]
+        }
+      });
+    }, cumulativeDelay);
+
+    // Stage: formatting — after 12s
+    cumulativeDelay += 4000;
+    const t3 = setTimeout(() => {
+      dispatch({
+        type: 'SET_PROCESSING_STATE',
+        payload: {
+          stage: 'formatting',
+          message: STAGE_MESSAGES.formatting,
+          logs: [
+            ...STAGE_LOGS.uploading, ...STAGE_LOGS.extracting,
+            ...STAGE_LOGS.generating, ...STAGE_LOGS.formatting.slice(0, 1)
+          ]
+        }
+      });
+    }, cumulativeDelay);
+
+    cumulativeDelay += 3000;
+    const t3b = setTimeout(() => {
+      dispatch({
+        type: 'SET_PROCESSING_STATE',
+        payload: {
+          logs: [
+            ...STAGE_LOGS.uploading, ...STAGE_LOGS.extracting,
+            ...STAGE_LOGS.generating, ...STAGE_LOGS.formatting
+          ]
+        }
+      });
+    }, cumulativeDelay);
+
+    stageTimersRef.current = [t1, t1b, t2, t2b, t3, t3b];
+  }, [clearStageTimers]);
+
   const handleFileUpload = useCallback(async (file: File) => {
     dispatch({
       type: 'SET_PROCESSING_STATE',
       payload: {
         isProcessing: true,
         stage: 'uploading',
-        message: 'Đang tải file lên server...',
-        logs: ['Bắt đầu tải file lên máy chủ DocuMark AI.'],
+        message: STAGE_MESSAGES.uploading,
+        logs: [STAGE_LOGS.uploading[0]],
         error: null,
-        success: false
+        success: false,
+        uploadProgress: 0
       }
     });
     
     const newFileName = file.name.replace(/\.[^/.]+$/, ".md");
     dispatch({ type: 'SET_FILE_NAME', payload: newFileName });
 
+    // Start simulated progress for backend processing stages
+    startSimulatedProgress();
+
     try {
-      dispatch({
-        type: 'SET_PROCESSING_STATE',
-        payload: { stage: 'extracting', message: "Backend đang trích xuất bố cục và nội dung..." }
+      const response = await uploadAndConvertFile(file, (progress) => {
+        dispatch({
+          type: 'SET_PROCESSING_STATE',
+          payload: {
+            uploadProgress: progress,
+            message: `Đang tải file lên server... ${progress}%`
+          }
+        });
       });
       
-      const response = await uploadAndConvertFile(file);
-      
+      // API returned — clear simulation timers and jump to complete
+      clearStageTimers();
+
       dispatch({ type: 'SET_CONTENT', payload: response.markdown });
       dispatch({
         type: 'SET_PROCESSING_STATE',
-        payload: { isProcessing: false, stage: 'complete', success: true }
+        payload: {
+          isProcessing: false,
+          stage: 'complete',
+          success: true,
+          message: 'Chuyển đổi hoàn tất!',
+          logs: [
+            ...STAGE_LOGS.uploading, ...STAGE_LOGS.extracting,
+            ...STAGE_LOGS.generating, ...STAGE_LOGS.formatting,
+            '✅ Chuyển đổi thành công! Đã tối ưu bảng & định dạng.'
+          ]
+        }
       });
       
       addToast('success', 'Chuyển đổi văn bản thành công!');
     } catch (err: any) {
+      clearStageTimers();
+
       let errorMessage = "Có lỗi xảy ra khi xử lý tài liệu.";
       if (err.message) errorMessage = err.message;
 
@@ -173,7 +321,7 @@ const App: React.FC = () => {
       addToast('error', errorMessage);
       console.error(err);
     }
-  }, [addToast]);
+  }, [addToast, startSimulatedProgress, clearStageTimers]);
 
   const handleOpenMarkdown = useCallback(async (file: File) => {
     try {
@@ -295,6 +443,7 @@ const App: React.FC = () => {
           stage={state.processingState.stage}
           message={state.processingState.message}
           logs={state.processingState.logs}
+          uploadProgress={state.processingState.uploadProgress}
         />
       </div>
 

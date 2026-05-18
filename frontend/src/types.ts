@@ -1,4 +1,10 @@
-export type ProcessingStage = 'idle' | 'uploading' | 'extracting' | 'complete';
+export type ProcessingStage = 
+  | 'idle' 
+  | 'uploading'     // Đang upload file lên server
+  | 'extracting'    // Đang đọc PDF, phân tích layout
+  | 'generating'    // Đang nhận diện bảng & trích xuất nội dung
+  | 'formatting'    // Đang tạo & định dạng Markdown
+  | 'complete';     // Hoàn thành
 
 export interface ProcessingState {
   isProcessing: boolean;
@@ -7,6 +13,7 @@ export interface ProcessingState {
   logs: string[];
   error: string | null;
   success: boolean;
+  uploadProgress: number;  // 0-100, % upload thật từ axios
 }
 
 export interface DocumentData {

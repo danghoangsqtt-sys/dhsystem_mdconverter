@@ -1,6 +1,13 @@
 graph TD
-    UI[Frontend: React/Vite] -->|Upload File| API[Backend: FastAPI]
-    API --> Docling[Docling Engine]
-    Docling -->|Trả Markdown| API
-    API -->|Lưu File| Storage[Thư mục data/]
-    API -->|Trả phản hồi| UI
+    User[User Browser] -->|Upload DOCX/PDF| Frontend[Frontend: React/Vite]
+    Frontend -->|HTTP POST /api/convert| Backend[Backend: FastAPI]
+    Backend --> DoclingService[docling_service.py]
+    DoclingService -->|PDF: TableFormerMode.ACCURATE| DoclingPDF[Docling PDF Pipeline]
+    DoclingService -->|DOCX: MsWordDocumentBackend| DoclingDOCX[Docling DOCX Pipeline]
+    DoclingPDF --> RawMD[Raw Markdown]
+    DoclingDOCX --> RawMD
+    RawMD --> Cleaner[markdown_cleaner.py]
+    Cleaner -->|Cleaned Markdown| Backend
+    Backend -->|Luu file| Storage[data/ folder]
+    Backend -->|JSON response| Frontend
+    Frontend -->|Render| MDEditor[MDEditor Preview]
