@@ -15,8 +15,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 function getProjectRoot(): string {
   if (app.isPackaged) {
-    // Packaged exe path: .../frontend/dist/win-unpacked/frontend.exe
-    // Go up 3 levels:    win-unpacked → dist → frontend → markdown_convert
+    // Packaged exe path: .../frontend/release/win-unpacked/documark-ai.exe
+    // Go up 3 levels:    win-unpacked → release → frontend → markdown_convert
     const exeDir = path.dirname(process.execPath);
     return path.resolve(exeDir, '..', '..', '..');
   } else {
@@ -28,8 +28,10 @@ function getProjectRoot(): string {
 
 const PROJECT_ROOT = getProjectRoot();
 
-// APP_ROOT: __dirname-based (works in both dev & asar because
-// Electron's fs module transparently resolves paths inside app.asar)
+// APP_ROOT: __dirname-based
+// Dev:      __dirname = frontend/dist-electron/  → APP_ROOT = frontend/
+// Packaged: __dirname = release/win-unpacked/dist-electron/ → APP_ROOT = release/win-unpacked/
+// With asar:false, __dirname always points to real filesystem paths.
 process.env.APP_ROOT = path.join(__dirname, '..');
 
 export const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL'];

@@ -1,4 +1,16 @@
-
+# Build outputs
 frontend/dist/
 frontend/dist-electron/
+frontend/release/
 dist-electron/
+
+# Dependencies
+node_modules/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Environment
+docling-env/
+.env

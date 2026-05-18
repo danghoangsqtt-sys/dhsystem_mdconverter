@@ -1,9 +1,11 @@
 {
-  "name": "frontend",
+  "name": "documark-ai",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "main": "dist-electron/main.js",
+  "description": "DocuMark AI - Offline PDF to Markdown Converter",
+  "author": "DHSystem",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -11,6 +13,27 @@
     "preview": "vite preview",
     "dev:electron": "vite",
     "build:electron": "tsc -b && vite build && electron-builder"
+  },
+  "build": {
+    "appId": "com.dhsystem.documark-ai",
+    "productName": "DocuMark AI",
+    "asar": false,
+    "win": {
+      "target": ["nsis"],
+      "icon": "public/favicon.png"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*"
+    ],
+    "directories": {
+      "output": "release"
+    }
   },
   "dependencies": {
     "@uiw/react-md-editor": "^4.1.0",
