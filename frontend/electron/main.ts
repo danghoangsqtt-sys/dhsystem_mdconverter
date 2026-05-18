@@ -15,10 +15,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 function getProjectRoot(): string {
   if (app.isPackaged) {
-    // Packaged exe path: .../frontend/release/win-unpacked/documark-ai.exe
-    // Go up 3 levels:    win-unpacked → release → frontend → markdown_convert
-    const exeDir = path.dirname(process.execPath);
-    return path.resolve(exeDir, '..', '..', '..');
+    return process.resourcesPath;
   } else {
     // Dev mode: __dirname = frontend/dist-electron/
     // Go up 2 levels: dist-electron → frontend → markdown_convert

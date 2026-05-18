@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="110 60 300 400" width="512" height="512">
+  <defs>
+    <linearGradient id="docGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#E6EDF3"/>
+      <stop offset="100%" stop-color="#C9D1D9"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Document body with folded corner -->
+  <path fill="url(#docGrad)"
+        d="M 128 76 L 316 76 L 392 152 L 392 444 L 128 444 Z"/>
+
+  <!-- Corner fold shadow -->
+  <path fill="#8B949E"
+        d="M 316 76 L 392 152 L 316 152 Z"/>
+
+  <!-- Corner fold highlight line -->
+  <path fill="none" stroke="#6E7681" stroke-width="2"
+        d="M 316 76 L 316 152 L 392 152"/>
+
+  <!-- Document content lines (top section) -->
+  <rect x="162" y="182" width="186" height="14" rx="7" fill="#58A6FF"/>
+  <rect x="162" y="210" width="150" height="10" rx="5" fill="#8B949E" opacity="0.7"/>
+  <rect x="162" y="232" width="168" height="10" rx="5" fill="#8B949E" opacity="0.5"/>
+
+  <!-- Thin horizontal rule -->
+  <rect x="162" y="256" width="196" height="2" rx="1" fill="#30363D"/>
+
+  <!-- "M" letter -->
+  <path fill="#58A6FF"
+        d="M 162 276
+           L 162 364
+           L 188 364
+           L 188 318
+           L 214 348
+           L 240 318
+           L 240 364
+           L 266 364
+           L 266 276
+           L 240 276
+           L 214 306
+           L 188 276
+           Z"/>
+
+  <!-- Down-arrow -->
+  <path fill="#3FB950"
+        d="M 285 286
+           L 285 330
+           L 270 330
+           L 295 362
+           L 320 330
+           L 305 330
+           L 305 286
+           Z"/>
+
+  <!-- Small AI spark dots -->
+  <circle cx="342" cy="400" r="7" fill="#F78166" opacity="0.9"/>
+  <circle cx="362" cy="386" r="4" fill="#F78166" opacity="0.5"/>
+  <circle cx="362" cy="414" r="4" fill="#F78166" opacity="0.5"/>
+</svg>
