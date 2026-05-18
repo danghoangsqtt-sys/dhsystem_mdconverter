@@ -28,16 +28,13 @@ function getProjectRoot(): string {
 
 const PROJECT_ROOT = getProjectRoot();
 
-// APP_ROOT is the frontend directory
-process.env.APP_ROOT = app.isPackaged
-  ? path.dirname(path.dirname(path.dirname(process.execPath)))  // won't be used much in packaged
-  : path.join(__dirname, '..');
+// APP_ROOT: __dirname-based (works in both dev & asar because
+// Electron's fs module transparently resolves paths inside app.asar)
+process.env.APP_ROOT = path.join(__dirname, '..');
 
 export const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL'];
 export const MAIN_DIST = path.join(process.env.APP_ROOT, 'dist-electron');
-export const RENDERER_DIST = app.isPackaged
-  ? path.join(path.dirname(process.execPath), 'resources', 'app.asar', 'dist')
-  : path.join(process.env.APP_ROOT, 'dist');
+export const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist');
 
 process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL
   ? path.join(process.env.APP_ROOT, 'public')
@@ -106,12 +103,7 @@ function createWindow() {
     width: 1200,
     height: 800,
     title: 'DocuMark AI',
-    icon: path.join(
-      app.isPackaged
-        ? path.join(path.dirname(process.execPath), 'resources', 'app.asar', 'dist')
-        : path.join(process.env.APP_ROOT, 'public'),
-      'favicon.png'
-    ),
+    icon: path.join(process.env.VITE_PUBLIC, 'favicon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
       nodeIntegration: false,
