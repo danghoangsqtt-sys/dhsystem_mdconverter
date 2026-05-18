@@ -104,7 +104,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           </div>
           
           <div className="space-y-1 text-[10px] text-gray-500 border-t border-gray-200 pt-2">
-            <p><span className="font-semibold text-gray-600">Engine:</span> Docling AI + TableFormer</p>
+            <p><span className="font-semibold text-gray-600">Engine:</span> DHSystem Core Engine v2</p>
             <p><span className="font-semibold text-gray-600">Hỗ trợ:</span> PDF, DOCX, PPTX, HTML</p>
             <p><span className="font-semibold text-gray-600">Chế độ:</span> Offline — xử lý cục bộ</p>
           </div>

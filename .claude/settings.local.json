@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"from docling.document_converter import DocumentConverter; import inspect; print\\([x for x in dir\\(__import__\\('docling.document_converter', fromlist=['*']\\)\\) if 'Word' in x or 'Docx' in x or 'word' in x or 'docx' in x]\\)\")",
+      "Bash(python -c ' *)",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('build script:', d.get\\('scripts',{}\\).get\\('build',''\\)\\); print\\('electron-build:', d.get\\('scripts',{}\\).get\\('electron:build',''\\)\\);  print\\('pack:', d.get\\('scripts',{}\\).get\\('pack',''\\)\\)\")",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); [print\\(k,':', v\\) for k,v in d.get\\('scripts',{}\\).items\\(\\)]\")",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('build', {}\\), indent=2, ensure_ascii=False\\)\\)\")",
+      "Bash(ls -lh release/*.exe release/*.blockmap)",
+      "Bash(stat -c \"%y\" release/\"DocuMark AI Setup 1.0.0.exe\")",
+      "Bash(powershell -Command \"\\(Get-Item 'release/DocuMark AI Setup 1.0.0.exe'\\).LastWriteTime\")",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(xargs ls *)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); deps={**d.get\\('dependencies',{}\\), **d.get\\('devDependencies',{}\\)}; [print\\(f'{k}: {v}'\\) for k,v in deps.items\\(\\) if 'md' in k.lower\\(\\) or 'editor' in k.lower\\(\\) or 'codemirror' in k.lower\\(\\) or 'uiw' in k.lower\\(\\)]\")"
+    ]
+  }
+}
