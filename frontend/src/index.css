@@ -38,11 +38,19 @@
   background-color: #ffffff !important;
 }
 
-.w-md-editor-text-pre, 
-.w-md-editor-text-input {
-  font-family: "JetBrains Mono", "Fira Code", monospace !important;
+.w-md-editor-text-pre,
+.w-md-editor-text-pre > code,
+.w-md-editor-text-input,
+.w-md-editor-text-input::placeholder {
+  font-family: "JetBrains Mono", "Fira Code", Consolas, Monaco, monospace !important;
   font-size: 15px !important;
   line-height: 1.6 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  tab-size: 4 !important;
+  box-sizing: border-box !important;
+  word-break: break-all !important;
+  white-space: pre-wrap !important;
 }
 
 /* Notion-like subtle scrollbar */
