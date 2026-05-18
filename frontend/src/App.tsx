@@ -429,6 +429,7 @@ const App: React.FC = () => {
                   height="100%"
                   hideToolbar={false}
                   visibleDragbar={false}
+                  highlightEnable={false}
                   className="h-full border-none shadow-none rounded-none"
                 />
               </div>
