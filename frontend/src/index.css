@@ -19,18 +19,17 @@
 
    Fix strategy:
    1. Override the library's --md-editor-font-family CSS variable
-      to use standard system-ui sans-serif. Consolas does not support
-      Vietnamese diacritics natively, causing fallback fonts to jump
-      in line-height and break selection highlights.
-   2. Force font-weight: 400 on ALL token spans to prevent bold
-      markdown headers from shifting character widths (which is
-      critical when using non-monospace fonts).
-   3. Set a comfortable line-height (24px) to give VN diacritics space.
+      to use "Cascadia Mono", a monospace font that natively supports
+      Vietnamese diacritics, keeping syntax highlighting while maintaining alignment.
+   2. Fallback to other reliable monospace fonts.
+   3. Force font-weight: 400 on ALL token spans to prevent bold
+      markdown headers from shifting character widths.
+   4. Set a comfortable line-height (24px) to give VN diacritics space.
    ═══════════════════════════════════════════════════════════════════ */
 
 /* Step 1: Override the CSS variable at the editor root level. */
 .w-md-editor {
-  --md-editor-font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+  --md-editor-font-family: "Cascadia Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
   background-color: #ffffff !important;
   box-shadow: none !important;
   border: none !important;
@@ -71,8 +70,8 @@
 }
 
 /* Step 4: CRITICAL — Prevent ALL syntax tokens from changing
-   font-weight or font-style. If a token becomes bold in a sans-serif
-   font, its characters get wider than the transparent textarea below it! */
+   font-weight or font-style. If a token becomes bold, its characters
+   might get wider than the transparent textarea below it! */
 .w-md-editor-text-pre .token,
 .w-md-editor-text-pre .token *,
 .w-md-editor-text-pre code .token,
