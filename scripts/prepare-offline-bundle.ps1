@@ -65,7 +65,7 @@ if (-not $ValidateOnly) {
     $env:DOCUMARK_TRANSLATION_DOWNLOAD_DIR = $translationDir
     Invoke-CheckedPython @(
         '-s', '-c',
-        'import os; from huggingface_hub import snapshot_download; snapshot_download(repo_id="VietAI/envit5-translation", local_dir=os.environ["DOCUMARK_TRANSLATION_DOWNLOAD_DIR"], allow_patterns=["*.json", "*.model", "pytorch_model.bin"])'
+        "import os; from huggingface_hub import snapshot_download; snapshot_download(repo_id='VietAI/envit5-translation', local_dir=os.environ['DOCUMARK_TRANSLATION_DOWNLOAD_DIR'], allow_patterns=['*.json', '*.model', 'pytorch_model.bin'])"
     )
 }
 

@@ -15,14 +15,14 @@ Checklist này để chạy tay trên máy/VM sạch — không thể tự độ
 
 ## 2. Chuyển file & xác minh toàn vẹn
 
-- Nguồn: `frontend\release\DocuMark AI Setup 1.2.0.exe` (1,138,879,545 bytes ≈ 1,086.1 MiB)
+- Nguồn: `frontend\release\DocuMark AI Setup 1.2.0.exe` (1,992,753,048 bytes ≈ 1,900.4 MiB)
 - Sau khi copy sang máy đích, chạy (PowerShell hoặc cmd, không cần cài gì thêm):
   ```
   certutil -hashfile "DocuMark AI Setup 1.2.0.exe" SHA256
   ```
 - Kết quả **phải khớp**:
   ```
-  d3904f5638f4bc7136d23054b026e2e3f9e51cdaebc533f3dc21eb643f3a3ef0
+  0ae719dda89d7f09b7dc39ab96c054e23b19d1d2ebacdbca2a90611d52b0598f
   ```
 - Không khớp → file hỏng/thiếu khi copy, copy lại trước khi tiếp tục, đừng cài.
 
@@ -40,6 +40,10 @@ Checklist này để chạy tay trên máy/VM sạch — không thể tự độ
 - [ ] Khuyến nghị: ngắt mạng (tắt Wi-Fi/rút cáp) **trước khi** mở app lần đầu, xác
   nhận app vẫn khởi động và convert bình thường — đây là phép thử "true offline" thật sự.
 - [ ] UI load đầy đủ, không màn hình trắng.
+- [ ] Vẫn trong lúc ngắt mạng: bôi đen một đoạn có công thức (`$...$`) hoặc code
+  inline trong bản xem trước, bấm nút dịch ("Dịch đoạn đã chọn") — dịch ra tiếng
+  Việt thành công, công thức/code giữ nguyên verbatim (không bị dịch/mất). Model
+  EnViT5 nằm sẵn trong bundle nên bước này không được gọi mạng.
 
 ## 5. Smoke test chuyển đổi thực tế
 
@@ -51,6 +55,10 @@ Chuẩn bị sẵn 1 file PDF và 1 file DOCX thật (nên có ít nhất 1 bả
 - [ ] Cancel một job đang chạy: job dừng ngay trong UI; kiểm tra Task Manager sau
   vài giây không còn tiến trình `python.exe` mồ côi.
 - [ ] Thử 1 file gần/vượt 100 MiB: bị từ chối đúng cách, app không crash.
+- [ ] Bật lại mạng, bôi đen một đoạn có trích dẫn thật, bấm "Xác minh trích dẫn"
+  — đây là tính năng duy nhất cần internet (gọi OpenAlex), xác nhận trả kết quả
+  đúng khi có mạng. Nếu muốn, tắt mạng lại và thử lần nữa: phải báo lỗi thân
+  thiện bằng tiếng Việt, không crash app.
 
 ## 6. Vị trí lưu dữ liệu
 
