@@ -1,24 +1,52 @@
 import React, { useState } from 'react';
-import { 
+import {
   FileText,
   Save,
   Copy,
   Check,
-  Loader2
+  Loader2,
+  Pencil,
+  Columns2,
+  Eye,
+  ShieldCheck,
+  Languages
 } from 'lucide-react';
+import type { PreviewType } from '@uiw/react-md-editor';
 
 interface ToolbarProps {
   onSave: () => void;
   onCopy: () => void;
+  onVerifyCitation: () => void;
+  canVerifyCitation: boolean;
+  isVerifyingCitation: boolean;
+  onTranslate: () => void;
+  canTranslate: boolean;
+  isTranslating: boolean;
   fileName: string;
   saveStatus: 'saved' | 'saving';
+  previewMode: PreviewType;
+  onPreviewModeChange: (mode: PreviewType) => void;
 }
 
-const Toolbar: React.FC<ToolbarProps> = ({ 
-  onSave, 
-  onCopy, 
+const PREVIEW_MODES: { mode: PreviewType; icon: React.ElementType; label: string }[] = [
+  { mode: 'edit', icon: Pencil, label: 'Chỉ soạn thảo' },
+  { mode: 'live', icon: Columns2, label: 'Soạn thảo + Xem trước' },
+  { mode: 'preview', icon: Eye, label: 'Chỉ xem trước' },
+];
+
+const Toolbar: React.FC<ToolbarProps> = ({
+  onSave,
+  onCopy,
+  onVerifyCitation,
+  canVerifyCitation,
+  isVerifyingCitation,
+  onTranslate,
+  canTranslate,
+  isTranslating,
   fileName,
-  saveStatus
+  saveStatus,
+  previewMode,
+  onPreviewModeChange
 }) => {
   const [copied, setCopied] = useState(false);
 
@@ -59,7 +87,45 @@ const Toolbar: React.FC<ToolbarProps> = ({
       </div>
 
       <div className="flex items-center space-x-2">
-        <button 
+        <div className="flex items-center bg-gray-100 rounded-md p-0.5 mr-1">
+          {PREVIEW_MODES.map(({ mode, icon: Icon, label }) => (
+            <button
+              key={mode}
+              onClick={() => onPreviewModeChange(mode)}
+              title={label}
+              aria-label={label}
+              className={`flex items-center justify-center p-1.5 rounded transition-colors ${
+                previewMode === mode
+                  ? 'bg-white text-blue-600 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <Icon size={14} />
+            </button>
+          ))}
+        </div>
+
+        <button
+          onClick={onVerifyCitation}
+          disabled={!canVerifyCitation || isVerifyingCitation}
+          title={canVerifyCitation ? 'Kiểm tra trích dẫn/nội dung đã chọn' : 'Bôi đen một đoạn trong bản xem trước để kiểm tra'}
+          className="flex items-center space-x-2 px-3 py-1.5 rounded-md text-[13px] font-medium transition-colors border bg-white hover:bg-gray-50 text-gray-700 border-gray-200 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {isVerifyingCitation ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
+          <span>{isVerifyingCitation ? 'Đang xác minh...' : 'Xác minh trích dẫn'}</span>
+        </button>
+
+        <button
+          onClick={onTranslate}
+          disabled={!canTranslate || isTranslating}
+          title={canTranslate ? 'Dịch đoạn đã chọn sang Tiếng Việt' : 'Bôi đen một đoạn trong bản xem trước để dịch'}
+          className="flex items-center space-x-2 px-3 py-1.5 rounded-md text-[13px] font-medium transition-colors border bg-white hover:bg-gray-50 text-gray-700 border-gray-200 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {isTranslating ? <Loader2 size={14} className="animate-spin" /> : <Languages size={14} />}
+          <span>{isTranslating ? 'Đang dịch...' : 'Dịch đoạn đã chọn'}</span>
+        </button>
+
+        <button
           onClick={handleCopy}
           className={`flex items-center space-x-2 px-3 py-1.5 rounded-md text-[13px] font-medium transition-colors border ${
             copied 

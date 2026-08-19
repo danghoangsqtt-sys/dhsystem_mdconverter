@@ -1,16 +1,43 @@
-import React, { useEffect, useCallback, useReducer, useRef } from 'react';
+import React, { useEffect, useCallback, useReducer, useRef, useState } from 'react';
 import MDEditor from '@uiw/react-md-editor';
+import type { PreviewType } from '@uiw/react-md-editor';
 import { Agentation } from 'agentation';
 import Sidebar from './components/Sidebar';
 import Toolbar from './components/Toolbar';
 import Toast from './components/Toast';
 import ProcessingStatus from './components/ProcessingStatus';
-import { uploadAndConvertFile } from './services/api';
-import type { ProcessingState, ToastMessage } from './types';
+import { PdfViewerBox } from './components/PdfViewerBox';
+import { ExtractionResultsPanel } from './components/ExtractionResultsPanel';
+import { CitationVerificationPanel } from './components/CitationVerificationPanel';
+import { TranslationPanel } from './components/TranslationPanel';
+import {
+  uploadAndConvertFile,
+  checkBackendHealth,
+  fetchHistory,
+  fetchHistoryItem,
+  deleteHistoryItem,
+  cancelConversionJob,
+  verifyCitation,
+  translateText,
+  ConversionCancelledError,
+} from './services/api';
+import type { OcrLang, TableMode, HistoryEntry, ConversionJobState } from './services/api';
+import type { ProcessingState, ToastMessage, ExtractionResult, CitationVerificationEntry, TranslationEntry } from './types';
 import { AlertTriangle, X } from 'lucide-react';
 
 const STORAGE_KEY_CONTENT = 'documark_autosave_content';
 const STORAGE_KEY_FILENAME = 'documark_autosave_filename';
+
+// 'connecting': no successful /api/health response yet (backend process may
+// still be starting up, or Electron hasn't spawned it yet in this instant).
+// 'unreachable': health checks kept failing after the backend should have
+// had time to come up — likely crashed or was never started.
+type BackendStatus = 'connecting' | 'starting' | 'loading_models' | 'ready' | 'error' | 'unreachable';
+
+interface BackendState {
+  status: BackendStatus;
+  detail: string;
+}
 
 interface AppState {
   content: string;
@@ -20,6 +47,8 @@ interface AppState {
   showHelp: boolean;
   showSavePrompt: boolean;
   processingState: ProcessingState;
+  backend: BackendState;
+  history: HistoryEntry[];
 }
 
 type AppAction =
@@ -32,7 +61,10 @@ type AppAction =
   | { type: 'SET_SHOW_SAVE_PROMPT'; payload: boolean }
   | { type: 'SET_PROCESSING_STATE'; payload: Partial<ProcessingState> }
   | { type: 'RESET_DOCUMENT'; payload: { content: string, fileName: string } }
-  | { type: 'LOAD_SAVED_STATE'; payload: { content: string, fileName: string } };
+  | { type: 'LOAD_SAVED_STATE'; payload: { content: string, fileName: string } }
+  | { type: 'SET_BACKEND_STATE'; payload: BackendState }
+  | { type: 'SET_HISTORY'; payload: HistoryEntry[] }
+  | { type: 'REMOVE_HISTORY_ENTRY'; payload: string };
 
 const initialState: AppState = {
   content: "",
@@ -48,8 +80,12 @@ const initialState: AppState = {
     logs: [],
     error: null,
     success: false,
-    uploadProgress: 0
-  }
+    uploadProgress: 0,
+    progress: 0,
+    jobId: null
+  },
+  backend: { status: 'connecting', detail: 'Đang kết nối máy chủ...' },
+  history: []
 };
 
 function appReducer(state: AppState, action: AppAction): AppState {
@@ -83,45 +119,62 @@ function appReducer(state: AppState, action: AppAction): AppState {
       return {
         ...state,
         content: action.payload.content,
-        fileName: action.payload.fileName
+        fileName: action.payload.fileName,
+        // Loading a document (open file, restore autosave) supersedes
+        // whatever conversion/processing state was active before it.
+        processingState: initialState.processingState
       };
+    case 'SET_BACKEND_STATE':
+      return { ...state, backend: action.payload };
+    case 'SET_HISTORY':
+      return { ...state, history: action.payload };
+    case 'REMOVE_HISTORY_ENTRY':
+      return { ...state, history: state.history.filter(h => h.job_id !== action.payload) };
     default:
       return state;
   }
 }
 
-// Simulated processing log messages for each stage
-const STAGE_LOGS: Record<string, string[]> = {
-  uploading: [
-    'Đang tải file lên máy chủ DocuMark AI...',
-  ],
-  extracting: [
-    'Đã nhận file thành công.',
-    'Đang phân tích bố cục trang (Layout Analysis)...',
-    'Nhận diện vùng text, hình ảnh, bảng biểu...',
-  ],
-  generating: [
-    'Đang chạy TableFormer ACCURATE mode...',
-    'Phân tích cấu trúc bảng, merged cells...',
-    'Trích xuất nội dung văn bản & công thức...',
-  ],
-  formatting: [
-    'Đang tạo Markdown từ cấu trúc tài liệu...',
-    'Post-processing: Tối ưu bảng, loại bỏ cột rỗng...',
-    'Kiểm tra & định dạng kết quả cuối cùng...',
-  ],
-};
-
-const STAGE_MESSAGES: Record<string, string> = {
-  uploading: 'Đang tải file lên server...',
-  extracting: 'Đang đọc PDF & phân tích bố cục...',
-  generating: 'Đang nhận diện bảng & trích xuất nội dung...',
-  formatting: 'Đang tạo & định dạng Markdown...',
-};
-
 const App: React.FC = () => {
   const [state, dispatch] = useReducer(appReducer, initialState);
-  const stageTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  // Bumped by every action that replaces editor content (new upload, open
+  // markdown, new document). An in-flight upload's async response is only
+  // applied if this still matches the id it captured when it started —
+  // otherwise the user has since navigated elsewhere and the stale result
+  // is discarded instead of clobbering whatever they opened in the meantime.
+  const activeRequestIdRef = useRef(0);
+  const activeJobIdRef = useRef<string | null>(null);
+  const activeUploadControllerRef = useRef<AbortController | null>(null);
+  const batchCancelledRef = useRef(false);
+  const [previewMode, setPreviewMode] = useState<PreviewType>('edit');
+  // The PDF currently shown side-by-side with the editor for region
+  // extraction. Only set for .pdf uploads — non-PDF formats have nothing
+  // for react-pdf to render — and cleared whenever the document it
+  // corresponds to is no longer what's being edited (new doc, open .md).
+  const [sourceFile, setSourceFile] = useState<File | null>(null);
+  // Regions cropped from sourceFile, OCR'd, and pending user review — search
+  // the web or insert into the document. Cleared whenever sourceFile changes,
+  // since results reference content from that specific PDF.
+  const [extractionResults, setExtractionResults] = useState<ExtractionResult[]>([]);
+  // Citation/content-plausibility checks run against selected passages of the
+  // current document. Ephemeral (not persisted to history), same lifecycle as
+  // extractionResults — cleared whenever the document itself changes.
+  const [citationResults, setCitationResults] = useState<CitationVerificationEntry[]>([]);
+  const [isVerifyingCitation, setIsVerifyingCitation] = useState(false);
+  // Selection-based EN->VI translations, same ephemeral lifecycle and
+  // hasSelection gating as citationResults above.
+  const [translationResults, setTranslationResults] = useState<TranslationEntry[]>([]);
+  const [isTranslating, setIsTranslating] = useState(false);
+  // Tracks whether the DOM currently has a non-empty text selection, so the
+  // "Xác minh trích dẫn"/"Dịch đoạn đã chọn" buttons can be disabled instead
+  // of doing nothing on click. The selected text itself is read fresh at
+  // click-time (not stored here) — see handleVerifyCitation/handleTranslate.
+  // Selecting inside the MDEditor's raw "edit" textarea doesn't register
+  // through the Selection API, so the buttons stay disabled in that mode;
+  // only live/preview selections count.
+  const [hasSelection, setHasSelection] = useState(false);
+  const [ocrLang, setOcrLang] = useState<OcrLang>('vi_en');
+  const [tableMode, setTableMode] = useState<TableMode>('accurate');
 
   const addToast = useCallback((type: 'success' | 'error' | 'info', message: string) => {
     dispatch({ type: 'ADD_TOAST', payload: { id: Date.now(), type, message } });
@@ -131,15 +184,84 @@ const App: React.FC = () => {
     dispatch({ type: 'REMOVE_TOAST', payload: id });
   }, []);
 
-  // Clear all stage simulation timers
-  const clearStageTimers = useCallback(() => {
-    stageTimersRef.current.forEach(t => clearTimeout(t));
-    stageTimersRef.current = [];
+  // History is a convenience/browsing feature, not part of the critical
+  // conversion path — failures are silent rather than surfaced as toasts,
+  // since a backend blip here shouldn't interrupt what the user is doing.
+  const refreshHistory = useCallback(async () => {
+    try {
+      const entries = await fetchHistory();
+      dispatch({ type: 'SET_HISTORY', payload: entries });
+    } catch {
+      // ignored — sidebar just keeps showing the last known list
+    }
   }, []);
 
   useEffect(() => {
-    const savedContent = localStorage.getItem(STORAGE_KEY_CONTENT);
-    const savedFileName = localStorage.getItem(STORAGE_KEY_FILENAME);
+    refreshHistory();
+  }, [refreshHistory]);
+
+  // Poll the backend's real startup/model-loading state instead of assuming
+  // it's ready after a fixed delay. Polls quickly until the backend reports
+  // 'ready', then backs off to an occasional keep-alive check so a later
+  // crash/disconnect is also surfaced instead of failing silently.
+  useEffect(() => {
+    let cancelled = false;
+    let timerId: ReturnType<typeof setTimeout>;
+    let consecutiveFailures = 0;
+    let wasReady = false;
+
+    const poll = async () => {
+      let nextDelay: number;
+      try {
+        const health = await checkBackendHealth();
+        consecutiveFailures = 0;
+        if (!cancelled) {
+          dispatch({ type: 'SET_BACKEND_STATE', payload: { status: health.status, detail: health.detail } });
+          if (health.status === 'ready' && !wasReady) {
+            addToast('success', 'Máy chủ đã sẵn sàng chuyển đổi tài liệu.');
+          }
+        }
+        wasReady = health.status === 'ready';
+        nextDelay = health.status === 'ready' ? 15000 : 1200;
+      } catch {
+        consecutiveFailures += 1;
+        if (!cancelled) {
+          const unreachable = consecutiveFailures >= 5;
+          if (unreachable && wasReady) {
+            addToast('error', 'Mất kết nối với máy chủ backend.');
+          }
+          dispatch({
+            type: 'SET_BACKEND_STATE',
+            payload: unreachable
+              ? { status: 'unreachable', detail: 'Không thể kết nối máy chủ backend.' }
+              : { status: 'connecting', detail: 'Đang kết nối máy chủ...' }
+          });
+          if (unreachable) wasReady = false;
+        }
+        nextDelay = 1500;
+      }
+      if (!cancelled) {
+        timerId = setTimeout(poll, nextDelay);
+      }
+    };
+
+    poll();
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timerId);
+    };
+  }, [addToast]);
+
+  useEffect(() => {
+    let savedContent: string | null = null;
+    let savedFileName: string | null = null;
+    try {
+      savedContent = localStorage.getItem(STORAGE_KEY_CONTENT);
+      savedFileName = localStorage.getItem(STORAGE_KEY_FILENAME);
+    } catch {
+      addToast('info', 'Không thể đọc bản tự lưu của trình duyệt.');
+    }
 
     if (savedContent !== null) {
       dispatch({
@@ -153,144 +275,117 @@ const App: React.FC = () => {
         payload: { content: initialText, fileName: "Untitled Document" }
       });
     }
+  }, [addToast]);
+
+  useEffect(() => {
+    const handleSelectionChange = () => {
+      setHasSelection(!!window.getSelection()?.toString().trim());
+    };
+    document.addEventListener('selectionchange', handleSelectionChange);
+    return () => document.removeEventListener('selectionchange', handleSelectionChange);
   }, []);
 
   useEffect(() => {
     const timeoutId = setTimeout(() => {
-      localStorage.setItem(STORAGE_KEY_CONTENT, state.content);
-      localStorage.setItem(STORAGE_KEY_FILENAME, state.fileName);
-      dispatch({ type: 'SET_SAVE_STATUS', payload: 'saved' });
+      try {
+        localStorage.setItem(STORAGE_KEY_CONTENT, state.content);
+        localStorage.setItem(STORAGE_KEY_FILENAME, state.fileName);
+        dispatch({ type: 'SET_SAVE_STATUS', payload: 'saved' });
+      } catch {
+        addToast('info', 'Bản tự lưu đã vượt giới hạn bộ nhớ; hãy tải file Markdown xuống để tránh mất dữ liệu.');
+      }
     }, 1000);
     return () => clearTimeout(timeoutId);
-  }, [state.content, state.fileName]);
+  }, [state.content, state.fileName, addToast]);
 
   const handleContentChange = useCallback((newContent: string) => {
     dispatch({ type: 'SET_CONTENT', payload: newContent });
   }, []);
 
-  /**
-   * Start simulated progress stages after upload completes.
-   * Each stage adds log messages with timed intervals,
-   * giving users visual feedback while the backend processes.
-   * When the actual API response arrives, we jump to 'complete'.
-   */
-  const startSimulatedProgress = useCallback(() => {
-    clearStageTimers();
-    let cumulativeDelay = 0;
+  const syncJobState = useCallback((job: ConversionJobState, requestId: number) => {
+    if (activeRequestIdRef.current !== requestId) return;
+    activeJobIdRef.current = job.job_id;
+    const statusLogs: Record<ConversionJobState['status'], string[]> = {
+      queued: ['✓ Đã tải file lên an toàn.', 'Tác vụ đang chờ trong hàng đợi backend.'],
+      converting: ['✓ Đã tải file lên an toàn.', '✓ Đã nhận tác vụ từ hàng đợi.', 'Docling đang phân tích tài liệu.'],
+      finalizing: ['✓ Docling đã phân tích xong.', 'Đang kiểm tra và hoàn thiện Markdown.'],
+      complete: ['✓ Chuyển đổi và lưu kết quả hoàn tất.'],
+      cancelling: ['Đã nhận yêu cầu hủy; kết quả đang chạy sẽ bị loại bỏ.'],
+      cancelled: ['Tác vụ đã được hủy an toàn.'],
+      error: [job.error || 'Tác vụ backend thất bại.'],
+    };
+    dispatch({
+      type: 'SET_PROCESSING_STATE',
+      payload: {
+        isProcessing: !['complete', 'cancelled', 'error'].includes(job.status),
+        stage: job.status,
+        message: job.message,
+        logs: statusLogs[job.status],
+        progress: job.progress,
+        jobId: job.job_id,
+      },
+    });
+  }, []);
 
-    // Stage: extracting — starts immediately after upload
-    cumulativeDelay += 500;
-    const t1 = setTimeout(() => {
-      dispatch({
-        type: 'SET_PROCESSING_STATE',
-        payload: {
-          stage: 'extracting',
-          message: STAGE_MESSAGES.extracting,
-          logs: [...STAGE_LOGS.uploading, ...STAGE_LOGS.extracting.slice(0, 1)]
-        }
-      });
-    }, cumulativeDelay);
+  const handleFileUpload = useCallback(async (file: File): Promise<boolean> => {
+    const requestId = ++activeRequestIdRef.current;
+    const uploadController = new AbortController();
+    activeUploadControllerRef.current = uploadController;
+    activeJobIdRef.current = null;
 
-    // Add more extracting logs
-    cumulativeDelay += 2000;
-    const t1b = setTimeout(() => {
-      dispatch({
-        type: 'SET_PROCESSING_STATE',
-        payload: {
-          logs: [...STAGE_LOGS.uploading, ...STAGE_LOGS.extracting]
-        }
-      });
-    }, cumulativeDelay);
+    // Shown immediately (not gated on conversion finishing) so the user can
+    // start browsing pages / drawing extraction boxes right away. Only PDFs
+    // get the side-by-side viewer — react-pdf can't render DOCX/PPTX/HTML.
+    setSourceFile(file.name.toLowerCase().endsWith('.pdf') ? file : null);
+    setExtractionResults([]);
+    setCitationResults([]);
+    setTranslationResults([]);
 
-    // Stage: generating — after 5s
-    cumulativeDelay += 3000;
-    const t2 = setTimeout(() => {
-      dispatch({
-        type: 'SET_PROCESSING_STATE',
-        payload: {
-          stage: 'generating',
-          message: STAGE_MESSAGES.generating,
-          logs: [...STAGE_LOGS.uploading, ...STAGE_LOGS.extracting, ...STAGE_LOGS.generating.slice(0, 1)]
-        }
-      });
-    }, cumulativeDelay);
-
-    cumulativeDelay += 3000;
-    const t2b = setTimeout(() => {
-      dispatch({
-        type: 'SET_PROCESSING_STATE',
-        payload: {
-          logs: [...STAGE_LOGS.uploading, ...STAGE_LOGS.extracting, ...STAGE_LOGS.generating]
-        }
-      });
-    }, cumulativeDelay);
-
-    // Stage: formatting — after 12s
-    cumulativeDelay += 4000;
-    const t3 = setTimeout(() => {
-      dispatch({
-        type: 'SET_PROCESSING_STATE',
-        payload: {
-          stage: 'formatting',
-          message: STAGE_MESSAGES.formatting,
-          logs: [
-            ...STAGE_LOGS.uploading, ...STAGE_LOGS.extracting,
-            ...STAGE_LOGS.generating, ...STAGE_LOGS.formatting.slice(0, 1)
-          ]
-        }
-      });
-    }, cumulativeDelay);
-
-    cumulativeDelay += 3000;
-    const t3b = setTimeout(() => {
-      dispatch({
-        type: 'SET_PROCESSING_STATE',
-        payload: {
-          logs: [
-            ...STAGE_LOGS.uploading, ...STAGE_LOGS.extracting,
-            ...STAGE_LOGS.generating, ...STAGE_LOGS.formatting
-          ]
-        }
-      });
-    }, cumulativeDelay);
-
-    stageTimersRef.current = [t1, t1b, t2, t2b, t3, t3b];
-  }, [clearStageTimers]);
-
-  const handleFileUpload = useCallback(async (file: File) => {
     dispatch({
       type: 'SET_PROCESSING_STATE',
       payload: {
         isProcessing: true,
         stage: 'uploading',
-        message: STAGE_MESSAGES.uploading,
-        logs: [STAGE_LOGS.uploading[0]],
+        message: 'Đang tải file lên backend...',
+        logs: ['Đang kiểm tra định dạng và kích thước file.'],
         error: null,
         success: false,
-        uploadProgress: 0
+        uploadProgress: 0,
+        progress: 0,
+        jobId: null,
       }
     });
-    
+
     const newFileName = file.name.replace(/\.[^/.]+$/, ".md");
     dispatch({ type: 'SET_FILE_NAME', payload: newFileName });
 
-    // Start simulated progress for backend processing stages
-    startSimulatedProgress();
-
     try {
-      const response = await uploadAndConvertFile(file, (progress) => {
-        dispatch({
-          type: 'SET_PROCESSING_STATE',
-          payload: {
-            uploadProgress: progress,
-            message: `Đang tải file lên server... ${progress}%`
-          }
-        });
+      const response = await uploadAndConvertFile(file, {
+        lang: ocrLang,
+        tableMode,
+        signal: uploadController.signal,
+        onUploadProgress: (progress) => {
+          if (activeRequestIdRef.current !== requestId) return;
+          dispatch({
+            type: 'SET_PROCESSING_STATE',
+            payload: {
+              uploadProgress: progress,
+              message: `Đang tải file lên server... ${progress}%`
+            }
+          });
+        },
+        onJobCreated: job => syncJobState(job, requestId),
+        onJobStatus: job => syncJobState(job, requestId),
       });
-      
-      // API returned — clear simulation timers and jump to complete
-      clearStageTimers();
 
+      if (activeRequestIdRef.current !== requestId) {
+        // Superseded by a newer upload / opened file / new document while
+        // this request was in flight — discard the stale result.
+        return false;
+      }
+
+      activeJobIdRef.current = null;
+      activeUploadControllerRef.current = null;
       dispatch({ type: 'SET_CONTENT', payload: response.markdown });
       dispatch({
         type: 'SET_PROCESSING_STATE',
@@ -299,31 +394,251 @@ const App: React.FC = () => {
           stage: 'complete',
           success: true,
           message: 'Chuyển đổi hoàn tất!',
-          logs: [
-            ...STAGE_LOGS.uploading, ...STAGE_LOGS.extracting,
-            ...STAGE_LOGS.generating, ...STAGE_LOGS.formatting,
-            '✅ Chuyển đổi thành công! Đã tối ưu bảng & định dạng.'
-          ]
+          progress: 100,
+          jobId: response.job_id,
+          logs: ['✓ Chuyển đổi thành công và đã kiểm tra định dạng Markdown.']
         }
       });
-      
-      addToast('success', 'Chuyển đổi văn bản thành công!');
-    } catch (err: any) {
-      clearStageTimers();
 
-      let errorMessage = "Có lỗi xảy ra khi xử lý tài liệu.";
-      if (err.message) errorMessage = err.message;
+      addToast('success', 'Chuyển đổi văn bản thành công!');
+      refreshHistory();
+      return true;
+    } catch (err: unknown) {
+      if (activeRequestIdRef.current !== requestId) {
+        return false;
+      }
+
+      activeJobIdRef.current = null;
+      activeUploadControllerRef.current = null;
+      const wasCancelled = err instanceof ConversionCancelledError || uploadController.signal.aborted;
+      let errorMessage = 'Có lỗi xảy ra khi xử lý tài liệu.';
+      if (err instanceof Error && err.message) errorMessage = err.message;
 
       dispatch({
         type: 'SET_PROCESSING_STATE',
-        payload: { isProcessing: false, error: errorMessage, success: false }
+        payload: {
+          isProcessing: false,
+          stage: wasCancelled ? 'cancelled' : 'error',
+          message: wasCancelled ? 'Tác vụ đã bị hủy.' : errorMessage,
+          logs: wasCancelled ? ['Tác vụ đã được hủy an toàn.'] : [errorMessage],
+          error: wasCancelled ? null : errorMessage,
+          success: false,
+        }
       });
-      addToast('error', errorMessage);
-      console.error(err);
+      if (wasCancelled) addToast('info', 'Đã hủy tác vụ chuyển đổi.');
+      else {
+        addToast('error', errorMessage);
+        console.error(err);
+      }
+      return false;
     }
-  }, [addToast, startSimulatedProgress, clearStageTimers]);
+  }, [addToast, ocrLang, tableMode, refreshHistory, syncJobState]);
+
+  const handleCancelProcessing = useCallback(async () => {
+    batchCancelledRef.current = true;
+    activeUploadControllerRef.current?.abort();
+    const jobId = activeJobIdRef.current;
+    if (!jobId) return;
+    try {
+      const job = await cancelConversionJob(jobId);
+      syncJobState(job, activeRequestIdRef.current);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Không thể gửi yêu cầu hủy tác vụ.';
+      addToast('error', message);
+    }
+  }, [addToast, syncJobState]);
+
+  // Processes multiple files sequentially (not in parallel) so they don't
+  // contend for the backend's single conversion pipeline and so upload
+  // progress / processing status stays meaningful for one file at a time.
+  // Each result lands in History regardless; the editor ends up showing
+  // whichever file finished last, matching single-file upload behavior.
+  const handleFilesUpload = useCallback(async (files: File[]) => {
+    if (files.length === 0) return;
+    batchCancelledRef.current = false;
+    if (files.length === 1) {
+      await handleFileUpload(files[0]);
+      return;
+    }
+
+    addToast('info', `Đang xử lý hàng loạt ${files.length} file...`);
+    let successCount = 0;
+    for (const file of files) {
+      if (batchCancelledRef.current) break;
+      const ok = await handleFileUpload(file);
+      if (ok) successCount++;
+    }
+    addToast(
+      successCount === files.length ? 'success' : 'info',
+      `${batchCancelledRef.current ? 'Đã dừng' : 'Hoàn tất'} hàng loạt: ${successCount}/${files.length} file thành công. Xem lại trong Lịch sử.`
+    );
+  }, [handleFileUpload, addToast]);
+
+  // Sends region images cropped out of the PDF viewer through the same
+  // /api/convert pipeline used for whole documents (docling's ImageFormatOption
+  // uses identical OCR/language config), with record_history=false since these
+  // one-off crops aren't "documents" worth keeping in the history list. Each
+  // region's OCR'd text becomes its own review card (see ExtractionResultsPanel)
+  // instead of being auto-appended — the point is to let the user search the
+  // web for that region's content during research, then optionally insert it.
+  // Rethrows on failure so PdfViewerBox knows to keep the boxes for retry.
+  const handleExtractRegions = useCallback(async (images: Blob[]) => {
+    if (images.length === 0) return;
+    try {
+      const results = [];
+      for (let i = 0; i < images.length; i += 1) {
+        results.push(await uploadAndConvertFile(
+          new File([images[i]], `vung-chon-${Date.now()}-${i}.png`, { type: 'image/png' }),
+          { lang: ocrLang, tableMode, recordHistory: false }
+        ));
+      }
+      const newResults: ExtractionResult[] = results
+        .map((r, i) => ({ id: `${Date.now()}-${i}`, text: r.markdown.trim() }))
+        .filter(r => r.text.length > 0);
+
+      if (newResults.length === 0) {
+        addToast('info', 'Không nhận diện được nội dung trong vùng đã chọn.');
+        return;
+      }
+      setExtractionResults(prev => [...prev, ...newResults]);
+      addToast('success', `Đã nhận diện ${newResults.length} vùng. Tìm kiếm hoặc chèn vào tài liệu bên dưới.`);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Lỗi khi trích xuất vùng đã chọn.';
+      addToast('error', message);
+      throw err;
+    }
+  }, [ocrLang, tableMode, addToast]);
+
+  const handleExtractionTextChange = useCallback((id: string, text: string) => {
+    setExtractionResults(prev => prev.map(r => (r.id === id ? { ...r, text } : r)));
+  }, []);
+
+  const handleExtractionDismiss = useCallback((id: string) => {
+    setExtractionResults(prev => prev.filter(r => r.id !== id));
+  }, []);
+
+  const handleExtractionInsert = useCallback((result: ExtractionResult) => {
+    dispatch({
+      type: 'SET_CONTENT',
+      payload: state.content.trim() ? `${state.content}\n\n${result.text}` : result.text
+    });
+    setExtractionResults(prev => prev.filter(r => r.id !== result.id));
+    addToast('success', 'Đã chèn vào tài liệu.');
+  }, [state.content, addToast]);
+
+  // Opens a web search for the (possibly user-edited) region text. Uses the
+  // Electron main-process bridge when available (renderer has no direct
+  // shell access under contextIsolation) and falls back to window.open for
+  // plain-browser dev mode.
+  const handleExtractionSearch = useCallback((result: ExtractionResult) => {
+    const query = result.text.trim();
+    if (!query) return;
+    const url = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+    if (window.documark?.openExternal) {
+      window.documark.openExternal(url);
+    } else {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
+  }, []);
+
+  // Reads the current DOM selection at click-time (not live-tracked — only
+  // whether *something* is selected is tracked, via hasSelection) and sends
+  // it to OpenAlex/Ollama for a citation-existence + advisory plausibility
+  // check. Requires internet access — the only action in the app that does,
+  // so failures get an explicit message rather than the generic fallback.
+  const handleVerifyCitation = useCallback(async () => {
+    const selectedText = window.getSelection()?.toString().trim() ?? '';
+    if (!selectedText) {
+      addToast('info', 'Hãy bôi đen một đoạn trong bản xem trước để xác minh.');
+      return;
+    }
+    setIsVerifyingCitation(true);
+    try {
+      const result = await verifyCitation(selectedText);
+      setCitationResults(prev => [...prev, { id: `${Date.now()}`, ...result }]);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Không thể kết nối để xác minh trích dẫn.';
+      addToast('error', message);
+    } finally {
+      setIsVerifyingCitation(false);
+    }
+  }, [addToast]);
+
+  const handleCitationDismiss = useCallback((id: string) => {
+    setCitationResults(prev => prev.filter(r => r.id !== id));
+  }, []);
+
+  // Same selection-read pattern as handleVerifyCitation, but runs entirely
+  // offline against a locally-cached NMT model — no internet required.
+  const handleTranslate = useCallback(async () => {
+    const selectedText = window.getSelection()?.toString().trim() ?? '';
+    if (!selectedText) {
+      addToast('info', 'Hãy bôi đen một đoạn trong bản xem trước để dịch.');
+      return;
+    }
+    setIsTranslating(true);
+    try {
+      const result = await translateText(selectedText);
+      setTranslationResults(prev => [...prev, { id: `${Date.now()}`, ...result }]);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Không thể dịch nội dung đã chọn.';
+      addToast('error', message);
+    } finally {
+      setIsTranslating(false);
+    }
+  }, [addToast]);
+
+  const handleTranslationDismiss = useCallback((id: string) => {
+    setTranslationResults(prev => prev.filter(r => r.id !== id));
+  }, []);
+
+  const handleLoadHistoryItem = useCallback(async (jobId: string) => {
+    activeRequestIdRef.current++;
+    activeUploadControllerRef.current?.abort();
+    if (activeJobIdRef.current) void cancelConversionJob(activeJobIdRef.current).catch(() => undefined);
+    activeJobIdRef.current = null;
+    setSourceFile(null);
+    setExtractionResults([]);
+    setCitationResults([]);
+    setTranslationResults([]);
+
+    try {
+      const entry = await fetchHistoryItem(jobId);
+      dispatch({
+        type: 'LOAD_SAVED_STATE',
+        payload: {
+          content: entry.markdown,
+          fileName: entry.original_filename.replace(/\.[^/.]+$/, '.md')
+        }
+      });
+      dispatch({ type: 'SET_SAVE_STATUS', payload: 'saving' });
+      addToast('success', `Đã tải lại: ${entry.original_filename}`);
+    } catch {
+      addToast('error', 'Không thể tải lại tài liệu từ lịch sử.');
+    }
+  }, [addToast]);
+
+  const handleDeleteHistoryItem = useCallback(async (jobId: string) => {
+    try {
+      await deleteHistoryItem(jobId);
+      dispatch({ type: 'REMOVE_HISTORY_ENTRY', payload: jobId });
+    } catch {
+      addToast('error', 'Không thể xóa mục lịch sử.');
+    }
+  }, [addToast]);
 
   const handleOpenMarkdown = useCallback(async (file: File) => {
+    // Invalidate any in-flight conversion so its eventual response can't
+    // clobber the file we're about to load.
+    activeRequestIdRef.current++;
+    activeUploadControllerRef.current?.abort();
+    if (activeJobIdRef.current) void cancelConversionJob(activeJobIdRef.current).catch(() => undefined);
+    activeJobIdRef.current = null;
+    setSourceFile(null);
+    setExtractionResults([]);
+    setCitationResults([]);
+    setTranslationResults([]);
+
     try {
       const text = await file.text();
       dispatch({
@@ -332,12 +647,23 @@ const App: React.FC = () => {
       });
       dispatch({ type: 'SET_SAVE_STATUS', payload: 'saving' });
       addToast('success', `Đã mở file: ${file.name}`);
-    } catch (err) {
+    } catch {
       addToast('error', "Không thể đọc định dạng file này.");
     }
   }, [addToast]);
 
   const resetDocument = useCallback(() => {
+    // Invalidate any in-flight conversion so its eventual response can't
+    // clobber the blank document we're about to show.
+    activeRequestIdRef.current++;
+    activeUploadControllerRef.current?.abort();
+    if (activeJobIdRef.current) void cancelConversionJob(activeJobIdRef.current).catch(() => undefined);
+    activeJobIdRef.current = null;
+    setSourceFile(null);
+    setExtractionResults([]);
+    setCitationResults([]);
+    setTranslationResults([]);
+
     dispatch({
       type: 'RESET_DOCUMENT',
       payload: { content: "", fileName: "Tai_lieu_moi.md" }
@@ -399,23 +725,54 @@ const App: React.FC = () => {
   return (
     <div className="flex h-screen w-screen bg-neutral-100 overflow-hidden font-sans">
       <Sidebar
-        onFileUpload={handleFileUpload}
+        onFilesUpload={handleFilesUpload}
         onOpenMarkdown={handleOpenMarkdown}
         onNewDocument={handleNewDocument}
         onShowHelp={openHelp}
         isProcessing={state.processingState.isProcessing}
+        backendStatus={state.backend.status}
+        backendDetail={state.backend.detail}
+        ocrLang={ocrLang}
+        onOcrLangChange={setOcrLang}
+        tableMode={tableMode}
+        onTableModeChange={setTableMode}
+        history={state.history}
+        onLoadHistoryItem={handleLoadHistoryItem}
+        onDeleteHistoryItem={handleDeleteHistoryItem}
       />
 
       <div className="flex-1 flex flex-col h-full overflow-hidden relative">
         <Toolbar
           onSave={handleSave}
           onCopy={handleCopy}
+          onVerifyCitation={handleVerifyCitation}
+          canVerifyCitation={hasSelection}
+          isVerifyingCitation={isVerifyingCitation}
+          onTranslate={handleTranslate}
+          canTranslate={hasSelection}
+          isTranslating={isTranslating}
           fileName={state.fileName}
           saveStatus={state.saveStatus}
+          previewMode={previewMode}
+          onPreviewModeChange={setPreviewMode}
         />
 
         <div className="flex-1 overflow-hidden relative bg-neutral-100 p-4">
-          <div className="h-full w-full max-w-7xl mx-auto flex gap-4 shadow-sm">
+          <div className={`h-full mx-auto flex gap-4 shadow-sm ${sourceFile ? 'w-full' : 'w-full max-w-7xl'}`}>
+            {sourceFile && (
+              <div className="w-1/2 h-full flex flex-col gap-3">
+                <div className="flex-1 min-h-0">
+                  <PdfViewerBox file={sourceFile} onExtractRegions={handleExtractRegions} />
+                </div>
+                <ExtractionResultsPanel
+                  results={extractionResults}
+                  onTextChange={handleExtractionTextChange}
+                  onSearch={handleExtractionSearch}
+                  onInsert={handleExtractionInsert}
+                  onDismiss={handleExtractionDismiss}
+                />
+              </div>
+            )}
             <div className="flex flex-col bg-white rounded-lg shadow-sm border border-neutral-200 overflow-hidden w-full" data-color-mode="light">
               <div className="bg-white px-4 py-3 border-b border-neutral-100 text-[11px] font-semibold text-neutral-400 uppercase tracking-wider flex justify-between">
                 <span>Soạn thảo Markdown</span>
@@ -425,13 +782,15 @@ const App: React.FC = () => {
                 <MDEditor
                   value={state.content}
                   onChange={(val) => handleContentChange(val || '')}
-                  preview="edit"
+                  preview={previewMode}
                   height="100%"
                   hideToolbar={false}
                   visibleDragbar={false}
                   className="h-full border-none shadow-none rounded-none"
                 />
               </div>
+              <CitationVerificationPanel results={citationResults} onDismiss={handleCitationDismiss} />
+              <TranslationPanel results={translationResults} onDismiss={handleTranslationDismiss} />
             </div>
           </div>
         </div>
@@ -444,6 +803,8 @@ const App: React.FC = () => {
           message={state.processingState.message}
           logs={state.processingState.logs}
           uploadProgress={state.processingState.uploadProgress}
+          progress={state.processingState.progress}
+          onCancel={handleCancelProcessing}
         />
       </div>
 
