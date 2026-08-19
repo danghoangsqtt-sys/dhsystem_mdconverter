@@ -38,7 +38,52 @@ def _cleanup_whitespace(content: str) -> str:
     return content
 
 
-def _parse_table(table_lines: list[str]) -> tuple[list[list[str]], int]:
+def _split_table_row(line: str) -> list[str]:
+    """Split a Markdown table row without breaking escaped pipes or code spans."""
+    content = line.strip()
+    if content.startswith('|'):
+        content = content[1:]
+    if content.endswith('|') and not content.endswith(r'\|'):
+        content = content[:-1]
+
+    cells: list[str] = []
+    current: list[str] = []
+    code_fence_len = 0
+    i = 0
+    while i < len(content):
+        char = content[i]
+        if char == '\\' and i + 1 < len(content):
+            current.append(char)
+            current.append(content[i + 1])
+            i += 2
+            continue
+        if char == '`':
+            run_end = i + 1
+            while run_end < len(content) and content[run_end] == '`':
+                run_end += 1
+            run_len = run_end - i
+            if code_fence_len == 0:
+                code_fence_len = run_len
+            elif code_fence_len == run_len:
+                code_fence_len = 0
+            current.extend(content[i:run_end])
+            i = run_end
+            continue
+        if char == '|' and code_fence_len == 0:
+            cells.append(''.join(current).strip())
+            current = []
+        else:
+            current.append(char)
+        i += 1
+    cells.append(''.join(current).strip())
+    return cells
+
+
+def _is_separator_row(cells: list[str]) -> bool:
+    return bool(cells) and all(re.fullmatch(r':?-{3,}:?', cell.strip()) for cell in cells)
+
+
+def _parse_table(table_lines: list[str]) -> tuple[list[list[str] | None], int]:
     """
     Parse markdown table lines into a 2D list of cells.
     Returns (rows, separator_index).
@@ -52,21 +97,13 @@ def _parse_table(table_lines: list[str]) -> tuple[list[list[str]], int]:
         if not stripped.startswith('|'):
             continue
 
-        # Check if this is the separator line
-        if re.match(r'^\|[\s\-:|]+\|$', stripped):
+        cells = _split_table_row(stripped)
+
+        # The separator is the only reliable boundary between headers and data.
+        if _is_separator_row(cells):
             sep_idx = i
             rows.append(None)  # placeholder for separator
             continue
-
-        # Split cells by pipe
-        cells = stripped.split('|')
-        # Remove first and last empty strings from split
-        if cells and cells[0].strip() == '':
-            cells = cells[1:]
-        if cells and cells[-1].strip() == '':
-            cells = cells[:-1]
-
-        cells = [c.strip() for c in cells]
         rows.append(cells)
 
     return rows, sep_idx
@@ -130,38 +167,26 @@ def _is_complex_table(rows: list, max_cols: int = 8, max_cell_len: int = 200) ->
     return False
 
 
-def _table_to_structured_list(rows: list) -> str:
+def _table_to_structured_list(rows: list, separator_index: int) -> str:
     """
     Convert a complex table into a readable structured list format.
     Uses header row as field names, each data row becomes a section.
     """
-    data_rows = [r for r in rows if r is not None]
-    if not data_rows:
+    header_rows = [r for r in rows[:separator_index] if r is not None]
+    data_rows = [r for r in rows[separator_index + 1:] if r is not None]
+    if not header_rows or not data_rows:
         return ''
 
-    # Build header names, merging multi-row headers if present
-    # Look at header rows (rows before first data row that have bold text)
-    header = data_rows[0]
-
-    # Try to find additional header rows (rows 1-2 that look like sub-headers).
-    # A row is a sub-header only when EVERY non-empty cell contains bold markup.
-    # The previous 70% threshold was too aggressive: DOCX merged-cell continuation
-    # rows (which have many empty cells but also real data cells) were misclassified
-    # as sub-headers, pushing actual_data_start past the real data.
-    extra_header_rows = []
-    actual_data_start = 1
-    for ri in range(1, min(len(data_rows), 4)):  # check up to 3 sub-header rows
-        row = data_rows[ri]
-        non_empty_cells = [c for c in row if c.strip()]
-        if non_empty_cells and all('**' in c for c in non_empty_cells):
-            extra_header_rows.append(row)
-            actual_data_start = ri + 1
-        else:
-            break
+    # Markdown defines rows after the separator as data. Styling such as bold
+    # is content, not structural evidence, so it must never cause a row to be
+    # skipped. Multiple pre-separator header rows are allowed; later headers
+    # fill gaps in the first header without consuming any data row.
+    header = header_rows[0]
+    extra_header_rows = header_rows[1:]
 
     result_parts = []
 
-    for row in data_rows[actual_data_start:]:
+    for row in data_rows:
         # Skip rows that are entirely empty
         non_empty = [c for c in row if c.strip() and re.sub(r'\*\*', '', c).strip()]
         if not non_empty:
@@ -225,6 +250,24 @@ def _table_to_structured_list(rows: list) -> str:
             result_parts.append('\n'.join(section_lines))
 
     return '\n\n---\n\n'.join(result_parts)
+
+
+def _semantic_cell_text(content: str) -> str:
+    content = re.sub(r'\*\*|__', '', content)
+    return re.sub(r'\s+', ' ', content).strip()
+
+
+def _preserves_data_content(rows: list, separator_index: int, transformed: str) -> bool:
+    """Conservatively prove that every non-empty data cell survived."""
+    transformed_semantic = _semantic_cell_text(transformed)
+    for row in rows[separator_index + 1:]:
+        if row is None:
+            continue
+        for cell in row:
+            semantic = _semantic_cell_text(cell)
+            if semantic and semantic not in transformed_semantic:
+                return False
+    return True
 
 
 def _format_cell_content(content: str) -> str:
@@ -332,8 +375,8 @@ def _clean_tables(content: str) -> str:
             # Check if table is too complex
             if _is_complex_table(rows):
                 logger.info(f"Converting complex table (line {table_start + 1}) to structured list")
-                structured = _table_to_structured_list(rows)
-                if structured:
+                structured = _table_to_structured_list(rows, sep_idx)
+                if structured and _preserves_data_content(rows, sep_idx, structured):
                     result.append(structured)
                 else:
                     # Fallback: keep original table intact — never silently drop content.
