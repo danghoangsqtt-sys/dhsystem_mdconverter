@@ -1,7 +1,7 @@
 {
   "name": "documark-ai",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.2.0",
   "type": "module",
   "main": "dist-electron/main.js",
   "description": "DocuMark AI - Offline PDF to Markdown Converter",
@@ -12,12 +12,19 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "dev:electron": "vite",
-    "build:electron": "tsc -b && vite build && electron-builder"
+    "prepare:offline": "powershell -NoProfile -ExecutionPolicy Bypass -File ../scripts/prepare-offline-bundle.ps1",
+    "validate:offline": "powershell -NoProfile -ExecutionPolicy Bypass -File ../scripts/prepare-offline-bundle.ps1 -ValidateOnly",
+    "build:electron": "npm run prepare:offline && tsc -b && vite build && electron-builder"
   },
   "build": {
+    "publish": {
+      "provider": "github",
+      "owner": "danghoangsqtt-sys",
+      "repo": "dhsystem_mdconverter"
+    },
     "appId": "com.dhsystem.documark-ai",
     "productName": "DocuMark AI",
-    "asar": false,
+    "asar": true,
     "win": {
       "target": [
         "nsis"
@@ -42,8 +49,15 @@
         ]
       },
       {
-        "from": "../docling-env",
-        "to": "docling-env",
+        "from": "../python_runtime",
+        "to": "python_runtime",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "../offline_models",
+        "to": "offline_models",
         "filter": [
           "**/*"
         ]
@@ -57,12 +71,14 @@
     "@uiw/react-md-editor": "^4.1.0",
     "autoprefixer": "^10.5.0",
     "axios": "^1.16.1",
+    "electron-updater": "^6.8.9",
     "lucide-react": "^1.16.0",
+    "pdfjs-dist": "5.4.296",
     "postcss": "^8.5.14",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
+    "react-pdf": "^10.4.1",
     "rehype-sanitize": "^6.0.0",
-    "sharp": "^0.34.5",
     "tailwindcss": "3.4.17"
   },
   "devDependencies": {

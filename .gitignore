@@ -13,4 +13,13 @@ __pycache__/
 
 # Environment
 docling-env/
+python_runtime/
+offline_models/
 .env
+
+# Runtime data: uploaded source files, generated markdown output, and
+# conversion history. Created automatically by the backend on startup
+# (see main.py); never meant to be committed.
+data/uploads/
+data/outputs/
+data/history.json
