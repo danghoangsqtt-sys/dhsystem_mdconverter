@@ -1,208 +1,108 @@
 <div align="center">
   <img src="docs/logo.svg" alt="DocuMark AI Logo" width="128" height="128" />
-
   <h1>DocuMark AI Editor</h1>
-
-  <p><strong>Offline-first document-to-Markdown conversion engine with a professional editor</strong></p>
-
+  <p><strong>Ứng dụng Windows chuyển tài liệu sang Markdown, xử lý cục bộ bằng Docling</strong></p>
   <p>
-    <img alt="Version" src="https://img.shields.io/badge/version-1.1.0-58A6FF?style=flat-square&logo=github"/>
+    <img alt="Version" src="https://img.shields.io/badge/version-1.2.0-58A6FF?style=flat-square"/>
     <img alt="License" src="https://img.shields.io/badge/license-MIT-3FB950?style=flat-square"/>
     <img alt="Platform" src="https://img.shields.io/badge/platform-Windows-0078D4?style=flat-square&logo=windows"/>
-    <img alt="Python" src="https://img.shields.io/badge/python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white"/>
-    <img alt="React" src="https://img.shields.io/badge/react-19-61DAFB?style=flat-square&logo=react&logoColor=black"/>
-    <img alt="Electron" src="https://img.shields.io/badge/electron-42-47848F?style=flat-square&logo=electron&logoColor=white"/>
-  </p>
-
-  <p>
-    <a href="#-features">Features</a> •
-    <a href="#-architecture">Architecture</a> •
-    <a href="#-installation">Installation</a> •
-    <a href="#-usage">Usage</a> •
-    <a href="#-whats-new">What's New</a>
   </p>
 </div>
 
----
+## Tổng quan
 
-## ⚡ Overview
+DocuMark AI chuyển PDF, DOCX, PPTX, HTML và ảnh sang Markdown. Ứng dụng có OCR Việt/Anh, hai chế độ nhận dạng bảng, trích xuất vùng PDF, lịch sử kết quả và trình soạn thảo Markdown.
 
-**DocuMark AI Editor** is a privacy-first desktop application that converts complex documents — PDF, DOCX — into clean, structured Markdown optimized for AI workflows. It runs entirely offline using a local **Docling** engine and presents results in a professional split-view Markdown editor.
+Từ v1.2, luồng chuyển đổi dùng một hàng đợi backend có trạng thái thật. Mỗi file được kiểm tra loại/kích thước, xử lý tuần tự để tránh tranh chấp RAM/CPU, ghi kết quả nguyên tử và có thể hủy. Bản Electron production dùng API token theo phiên và lưu dữ liệu tại thư mục `userData` của ứng dụng.
 
-> **Your documents never leave your machine.** No cloud APIs. No telemetry.
+## Tính năng chính
 
----
+- Chuyển đổi `.pdf`, `.docx`, `.pptx`, `.html`, `.htm` và các ảnh phổ biến.
+- OCR `vi + en`, chỉ `vi`, hoặc chỉ `en`.
+- TableFormer `accurate`/`fast`; cleaner giữ nguyên bảng nếu không chứng minh được transform bảo toàn nội dung.
+- Trạng thái job thật: `queued → converting → finalizing → complete`.
+- Hủy ngay job đang chờ; job ML đang chạy được đánh dấu hủy và kết quả bị loại bỏ an toàn.
+- Lịch sử giới hạn, tự xóa output bị loại khỏi lịch sử; OCR vùng không tạo file mồ côi.
+- Runtime Python và model Docling/EasyOCR được đóng gói để conversion production chạy offline.
 
-## ✨ Features
+## Kiến trúc
 
-| Feature | Description |
-|---------|-------------|
-| 🔒 **100% Local Processing** | All conversion happens on-device via the embedded Docling engine |
-| 📄 **Smart Table Handling** | Complex tables (merged cells, multi-row headers) are intelligently restructured into readable Markdown |
-| 📝 **DOCX + PDF Support** | Handles both Word documents (direct XML parsing) and PDFs (ML-based layout recognition) |
-| ✍️ **Professional MDEditor** | Notion-style split-view Markdown editor with syntax highlighting |
-| 🎨 **Luxury UI** | Minimalist Luxury Blue / Neutral design built with Tailwind CSS |
-| 🚀 **Desktop Native** | Packaged as a standalone Windows `.exe` — no Node or Python required to run |
-| 🔗 **One-Click Launch** | `start.bat` starts the full stack in a single click |
-
----
-
-## 🏗️ Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                      Electron Shell                          │
-│                                                             │
-│  ┌─────────────────────┐    HTTP    ┌────────────────────┐  │
-│  │   React Frontend    │ ─────────► │   FastAPI Backend  │  │
-│  │                     │            │                    │  │
-│  │  • File Upload UI   │ ◄───────── │  • Docling Engine  │  │
-│  │  • Progress Stepper │  Markdown  │  • PDF Pipeline    │  │
-│  │  • MDEditor Preview │            │  • DOCX Pipeline   │  │
-│  │  • Toolbar (Save/   │            │  • MD Cleaner      │  │
-│  │    Copy/Download)   │            │                    │  │
-│  └─────────────────────┘            └────────────────────┘  │
-│                                              │               │
-│                                       ┌─────▼──────┐        │
-│                                       │  data/ dir │        │
-│                                       └────────────┘        │
-└─────────────────────────────────────────────────────────────┘
+```text
+Electron/React ── token + HTTP ──> FastAPI ──> single-worker queue ──> Docling
+      │                              │                                  │
+      └── editor/history <───────────┴── atomic output/history <────────┘
 ```
 
-**Stack:**
-- **Frontend:** React 19, TypeScript, Vite, Tailwind CSS, `@uiw/react-md-editor`
-- **Backend:** Python, FastAPI, Uvicorn, Docling
-- **Desktop:** Electron 42, electron-builder (NSIS installer)
-- **Conversion:** Docling with `TableFormerMode.ACCURATE` + custom post-processing
+- Frontend: React 19, TypeScript, Vite, Tailwind, MDEditor.
+- Desktop: Electron 42, context isolation + sandbox, preload bridge tối thiểu.
+- Backend: FastAPI, Docling 2.101.0, EasyOCR 1.7.2.
+- Storage: development dùng `data/`; bản cài đặt dùng `app.getPath('userData')/data`.
 
----
+Thiết kế chi tiết và các invariant nằm tại [ARCHITECTURE.md](.viepilot/ARCHITECTURE.md) và [SPEC v1.2](.viepilot/phases/phase-8-reliability-security-offline/SPEC.md).
 
-## 📦 Installation
+## Chạy development
 
-### Option A — Desktop App (Recommended)
+Yêu cầu Node.js hiện đại và Python tương thích với dependency đã khóa.
 
-Download and run the installer:
-
-```
-frontend/release/DocuMark AI Setup 1.0.0.exe
-```
-
-> The installer bundles the Electron shell. The Python backend (`docling-env/`) must be present in the same directory as the project root.
-
-### Option B — Development Mode
-
-**Prerequisites:** Node.js 18+, Python 3.10+
-
-```bash
-# 1. Clone
-git clone https://github.com/danghoangsqtt-sys/dhsystem_mdconverter.git
-cd dhsystem_mdconverter
-
-# 2. Setup Python environment
+```powershell
 python -m venv docling-env
-.\docling-env\Scripts\activate
-pip install -r backend\requirements.txt
-
-# 3. Install frontend dependencies
-cd frontend
+docling-env\Scripts\python.exe -m pip install -r backend\requirements.txt
+Set-Location frontend
 npm install
-
-# 4. Run in development mode
 npm run dev:electron
 ```
 
-### Option C — Quick Launch (after setup)
+Sau khi đã cài dependency, có thể chạy `start.bat` từ thư mục gốc. Script sẽ fail-fast nếu thiếu Python hoặc build frontend thất bại.
 
-```bash
-# From project root — starts both FastAPI backend and serves the app
-start.bat
-```
+## Build bản Windows offline
 
----
-
-## 🖥️ Usage
-
-1. **Launch** DocuMark AI from the desktop shortcut or `start.bat`
-2. **Upload** a PDF or DOCX file using the sidebar button
-3. **Wait** for the conversion progress stepper to complete (~10–60s depending on file complexity)
-4. **Review** the Markdown output in the split-view editor
-5. **Edit** as needed, then **Save**, **Copy**, or **Download** the result
-
----
-
-## 🔧 Build from Source
-
-```bash
-cd frontend
-
-# Production Electron package (generates installer in frontend/release/)
+```powershell
+Set-Location frontend
 npm run build:electron
 ```
 
-Output: `frontend/release/DocuMark AI Setup 1.0.0.exe`
+Quy trình build:
 
----
+1. Tạo/kiểm tra `python_runtime` độc lập (Python embeddable 3.14.0).
+2. Cài các dependency Python đã pin bằng `-s`, không dùng user site-packages.
+3. Tải `layout`, `tableformer`, `easyocr` vào `offline_models`.
+4. Fail build nếu thiếu runtime, EasyOCR hoặc artifact.
+5. Đóng gói runtime, model và backend vào NSIS installer trong `frontend/release/`.
 
-## 🆕 What's New
+Việc chuẩn bị model cần mạng một lần trên máy build. Đường chạy production đặt `HF_HUB_OFFLINE=1`, `TRANSFORMERS_OFFLINE=1`, tắt remote services và dùng artifact path cục bộ.
 
-### v1.1.0 — 2026-05-18
+Kiểm tra bundle mà không tải/cài lại:
 
-**Critical Bug Fix — DOCX Table Content Loss**
-
-DOCX files with complex tables (merged cells, multi-column layouts) were producing empty Markdown output due to three cascading bugs in the post-processing layer. All three have been fixed:
-
-| Bug | Root Cause | Fix |
-|-----|-----------|-----|
-| Silent table drop | `_clean_tables()` fallback returned `""` on structured-list failure | Fallback now preserves original table |
-| Wrong sub-header detection | 70% bold-cell threshold misclassified data rows | Changed to: only rows where **all** non-empty cells are bold |
-| Aggressive empty-column removal | Header row excluded from emptiness check | Now checks **all** rows including header |
-
-**Improvement:** Added explicit `WordFormatOption` config for DOCX files with explanatory comment on pipeline differences (DOCX = direct XML parsing, no ML needed).
-
----
-
-## 📁 Project Structure
-
-```
-dhsystem_mdconverter/
-├── backend/
-│   └── src/
-│       ├── main.py                    # FastAPI app + routes
-│       └── services/
-│           ├── docling_service.py     # Docling converter (PDF + DOCX)
-│           └── markdown_cleaner.py    # Post-processing pipeline
-├── frontend/
-│   ├── electron/
-│   │   ├── main.ts                    # Electron main process
-│   │   └── preload.ts
-│   ├── public/
-│   │   └── favicon.svg                # App icon
-│   └── src/
-│       ├── App.tsx                    # Main app logic
-│       ├── types.ts                   # TypeScript types
-│       ├── components/
-│       │   └── ProcessingStatus.tsx   # Progress stepper
-│       └── services/
-│           └── api.ts                 # Backend API calls
-├── data/                              # Converted files (gitignored)
-├── docs/
-│   └── logo.svg                       # Project logo
-├── .viepilot/                         # ViePilot project context
-├── start.bat                          # One-click launch script
-└── README.md
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\prepare-offline-bundle.ps1 -ValidateOnly
+powershell -ExecutionPolicy Bypass -File scripts\prepare-offline-bundle.ps1 -ValidateOnly -SmokeDocument .\sample.pdf
 ```
 
----
+## Kiểm thử
 
-## 🛡️ Privacy & Security
+```powershell
+docling-env\Scripts\python.exe -m unittest discover -s backend\tests -v
+docling-env\Scripts\python.exe -m compileall -q backend
+Set-Location frontend
+npm run lint
+npm run build
+npm audit --omit=dev
+```
 
-- **No network calls** from the conversion engine
-- **No telemetry** of any kind
-- All uploaded files are processed locally and saved to `data/` within the project folder
-- The application explicitly **does not write** to `C:\Users` or any system paths
+Bộ test bao phủ API token/origin, path traversal, giới hạn upload, queue/cancel/capacity, cleanup history/output và các regression làm mất nội dung bảng.
 
----
+## Bảo mật và dữ liệu
 
-<div align="center">
-  <sub>Built with ❤️ using <strong>ViePilot Vibe Coding</strong> · <a href="https://github.com/danghoangsqtt-sys/dhsystem_mdconverter">GitHub</a></sub>
-</div>
+- Mọi endpoint nghiệp vụ `/api/*` cần token phiên; bootstrap browser chỉ chấp nhận origin localhost tin cậy.
+- Job/history ID phải là UUID; upload mặc định tối đa 100 MiB và chỉ nhận extension được hỗ trợ.
+- File upload tạm được xóa sau complete/error/cancel.
+- Electron chỉ mở URL `http(s)` ra trình duyệt; renderer không có generic IPC hay Node integration.
+- `python_runtime/`, `offline_models/` và runtime data bị gitignore. Chạy `scripts/check-repository-hygiene.ps1` để phát hiện dữ liệu runtime đã bị Git theo dõi.
+
+Lưu ý: lịch sử Git đã được rewrite để gỡ dữ liệu chuyển đổi cũ từng bị theo dõi trước đây (bản backup trước khi rewrite nằm ở branch `backup/pre-history-purge-20260818`). Script hygiene ở trên chỉ báo lỗi, không tự xóa hay rewrite lịch sử — dùng để phát hiện sớm nếu dữ liệu runtime vô tình bị theo dõi lại.
+
+## Trạng thái phát hành
+
+v1.2 đã vượt qua unit tests, lint/build, dependency audit và offline PDF smoke test tại workspace phát triển. Clean-machine installer test vẫn là release gate thủ công trước khi công bố installer.
+
+Xem lịch sử thay đổi tại [CHANGELOG.md](CHANGELOG.md).

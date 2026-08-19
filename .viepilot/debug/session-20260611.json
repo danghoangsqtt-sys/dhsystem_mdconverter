@@ -1,0 +1,37 @@
+{
+  "id": "debug-20260611",
+  "status": "resolved",
+  "created_at": "2026-06-11T16:08:00Z",
+  "updated_at": "2026-06-11T16:08:00Z",
+  "problem": {
+    "description": "Failed to load resource: the server responded with a status of 404 (Not Found) for 127.0.0.1:8000/api/convert",
+    "symptoms": ["404 error when uploading file"],
+    "error_messages": ["AxiosError: Request failed with status code 404", "index-UIZxXED1.js:115 Error: Not Found"],
+    "affected_files": ["frontend/src/services/api.ts", "backend/run_server.py", "start.bat"]
+  },
+  "investigation": {
+    "hypotheses": [
+      {"id": 1, "description": "Backend is not running", "status": "rejected"},
+      {"id": 2, "description": "Backend endpoint /api/convert is missing or misspelled", "status": "rejected"},
+      {"id": 3, "description": "Another process is intercepting port 8000", "status": "confirmed"}
+    ],
+    "tests_run": [
+      {"command": "curl.exe -v -X POST http://127.0.0.1:8000/api/convert", "output": "404 Not Found", "timestamp": "2026-06-11T16:07:22Z"},
+      {"command": "netstat -ano | findstr :8000", "output": "PIDs 108172, 101948, 122508", "timestamp": "2026-06-11T16:07:46Z"},
+      {"command": "Get-WmiObject Win32_Process -Filter \"ProcessId = 108172\" | Select-Object CommandLine", "output": "C:\\Python314\\python.exe -m uvicorn main:app --port 8000", "timestamp": "2026-06-11T16:08:14Z"}
+    ],
+    "findings": [
+      "There are multiple processes listening on port 8000.",
+      "The project's backend is running on 0.0.0.0:8000 (PID 101948)",
+      "Another unknown application is running on 127.0.0.1:8000 (PID 108172)",
+      "Because 127.0.0.1 is more specific than 0.0.0.0, the unknown application intercepts all requests to 127.0.0.1:8000.",
+      "The unknown application does not have the /api/convert endpoint, which causes the 404 error."
+    ]
+  },
+  "resolution": {
+    "root_cause": "Port conflict on 8000. Another application bound specifically to 127.0.0.1:8000 is intercepting requests intended for the project backend bound to 0.0.0.0:8000.",
+    "fix_applied": "Change the backend and frontend port from 8000 to 8088 to avoid conflicts.",
+    "files_changed": ["frontend/src/services/api.ts", "backend/run_server.py", "start.bat"],
+    "verification": "Check if port 8088 is free and the backend starts properly on it."
+  }
+}

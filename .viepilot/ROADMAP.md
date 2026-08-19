@@ -100,3 +100,30 @@
 **Acceptance Criteria:**
 - Progress percentage reflects actual Docling processing stage
 - Cancel button terminates backend conversion (via server-side signal)
+
+---
+
+## Phase 8: Reliability, Security & True Offline Packaging 🟡 RELEASE GATED
+
+**Mục tiêu:** Hợp nhất các phase 4–7 còn dang dở thành một release v1.2.0 có ranh giới bảo mật, không mất dữ liệu, tiến độ backend thực, storage bền vững và packaging offline có thể kiểm chứng.
+
+**SPEC:** `.viepilot/phases/phase-8-reliability-security-offline/SPEC.md`
+**PLAN:** `.viepilot/phases/phase-8-reliability-security-offline/PLAN.md`
+
+### Tasks
+
+- [x] **T8.1** API session boundary, UUID/input validation, upload/concurrency limits
+- [x] **T8.2** Markdown content-preservation parser + regression tests
+- [x] **T8.3** Job queue, polling progress thực và cancel semantics
+- [x] **T8.4** Durable userData storage, atomic history, orphan cleanup
+- [x] **T8.5** Portable Python runtime, bundled Docling/EasyOCR models, offline preflight
+- [x] **T8.6** Version/docs/dependency cleanup và automated verification
+
+### Release gates
+
+- [x] Automated backend/frontend quality gates pass
+- [x] Security reproductions đóng hoàn toàn
+- [x] Offline bundle preflight và packaged-layout PDF smoke pass
+- [x] NSIS installer 1.2.0 build pass
+- [ ] Clean-machine installer test pass
+- [ ] Runtime documents không còn nằm trong Git index/release commit

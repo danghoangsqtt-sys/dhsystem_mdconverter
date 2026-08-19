@@ -1,100 +1,74 @@
-# Kiến Trúc Hệ Thống (Architecture)
+# Kiến trúc hệ thống — v1.2
 
-## ViePilot organization context
-ViePilot profile: none / not configured
+## 1. Tổng quan
 
-## 1. System Overview
-
-Hệ thống gồm 2 layer chính:
-- **Frontend:** React + Vite + TypeScript — UI upload file, hiển thị progress, preview/edit Markdown
-- **Backend:** FastAPI (Python) — nhận file, gọi Docling, post-process, trả về Markdown
+DocuMark là ứng dụng desktop local-first gồm Electron/React renderer và FastAPI/Docling backend chạy trên loopback. Backend là authority cho validation, trạng thái job, chuyển đổi và persistence; frontend chỉ điều phối và hiển thị.
 
 ```mermaid
-graph TD
-    User[User Browser] -->|Upload DOCX/PDF| Frontend[Frontend: React/Vite]
-    Frontend -->|HTTP POST /api/convert| Backend[Backend: FastAPI]
-    Backend --> DoclingService[docling_service.py]
-    DoclingService -->|PDF: TableFormerMode.ACCURATE| DoclingPDF[Docling PDF Pipeline]
-    DoclingService -->|DOCX: MsWordDocumentBackend| DoclingDOCX[Docling DOCX Pipeline]
-    DoclingPDF --> RawMD[Raw Markdown]
-    DoclingDOCX --> RawMD
-    RawMD --> Cleaner[markdown_cleaner.py]
-    Cleaner -->|Cleaned Markdown| Backend
-    Backend -->|Lưu file| Storage[data/ folder]
-    Backend -->|JSON response| Frontend
-    Frontend -->|Render| MDEditor[MDEditor Preview]
+flowchart LR
+    U[User] --> R[React renderer]
+    R -->|session token + job API| A[FastAPI]
+    A -->|bounded queue| Q[Single worker]
+    Q --> D[Docling/EasyOCR]
+    D --> C[Content-preserving cleaner]
+    C --> S[Atomic output + history]
+    S --> R
+    E[Electron main] -->|token, data/model paths| A
+    E -->|minimal preload bridge| R
 ```
 
-## 2. Services & Modules
+## 2. Ranh giới và invariant
 
-### Backend (`backend/src/`)
-| Module | Vai trò |
-|--------|---------|
-| `main.py` | FastAPI app, routing, CORS, static file serving |
-| `services/docling_service.py` | Khởi tạo Docling converter, convert file → raw markdown |
-| `services/markdown_cleaner.py` | Post-process markdown: fix tables, remove empty cols, convert complex tables to structured lists |
+- Electron sinh token ngẫu nhiên cho mỗi process; renderer chỉ nhận token và hàm mở URL `http(s)`.
+- Mọi API nghiệp vụ cần token; `/api/session` chỉ bootstrap cho trusted localhost origin.
+- Tất cả identifier đi vào path phải parse thành UUID trước.
+- Upload được stream theo chunk, có allowlist extension và giới hạn mặc định 100 MiB.
+- Một worker duy nhất gọi Docling; registry/queue có capacity hữu hạn.
+- File tạm luôn được cleanup. Output/history chỉ tồn tại cùng nhau đối với job có lịch sử.
+- Markdown transform phải bảo toàn nội dung; không chứng minh được thì giữ input gốc.
+- Packaged mode không dùng user Python/cache, bắt buộc runtime và artifact cục bộ.
 
-### Frontend (`frontend/src/`)
-| File | Vai trò |
-|------|---------|
-| `App.tsx` | Main logic, state management, upload flow |
-| `types.ts` | ProcessingStage type, shared interfaces |
-| `components/ProcessingStatus.tsx` | Progress stepper UI |
-| `services/api.ts` | Axios HTTP calls to backend |
-
-## 3. Docling Pipeline Architecture
+## 3. Job lifecycle
 
 ```mermaid
-graph LR
-    PDF -->|PdfFormatOption| PDFPipeline[PaginatedPipeline]
-    PDFPipeline -->|TableFormerMode.ACCURATE| TableML[ML Table Recognition]
-    TableML -->|do_cell_matching=True| MergedCells[Merged Cell Handling]
-
-    DOCX -->|WordFormatOption| DOCXPipeline[SimplePipeline]
-    DOCXPipeline -->|MsWordDocumentBackend| OOXML[Direct OOXML XML Parsing]
-
-    MergedCells --> Document[Docling Document Model]
-    OOXML --> Document
-    Document -->|export_to_markdown| RawMarkdown[Raw Markdown]
-    RawMarkdown --> Cleaner[markdown_cleaner.py]
+stateDiagram-v2
+    [*] --> queued
+    queued --> converting
+    queued --> cancelled: cancel
+    converting --> finalizing
+    converting --> cancelling: cancel
+    finalizing --> cancelling: cancel
+    cancelling --> cancelled: native call/finalization returns
+    finalizing --> complete
+    converting --> error
+    finalizing --> error
 ```
 
-## 4. Markdown Cleaner Architecture
+Docling chạy trong thread nên không thể hard-cancel an toàn. Với job đang chạy, backend công bố `cancelling`, chờ native call kết thúc và loại bỏ kết quả thay vì báo hủy giả.
 
-Post-processing pipeline trong `markdown_cleaner.py`:
+## 4. Module map
 
-```
-clean_markdown(content)
-  → _normalize_line_endings()     # CRLF → LF
-  → _clean_tables()               # process mỗi markdown table
-      ├── _parse_table()          # parse pipe-format → 2D rows
-      ├── _is_complex_table()     # >8 cols OR cell >200 chars?
-      │   ├── YES → _table_to_structured_list()
-      │   │         nếu empty → KEEP ORIGINAL (never drop)
-      │   └── NO  → _count_empty_columns() → _remove_empty_columns()
-  → _cleanup_whitespace()         # trailing spaces, blank lines
-```
+| Module | Trách nhiệm |
+|---|---|
+| `backend/src/config.py` | token, origin, resource limits, data/model path |
+| `backend/src/main.py` | FastAPI boundary, validation, upload/job/history routes |
+| `backend/src/services/job_service.py` | queue, lifecycle, cancel, atomic output cleanup |
+| `backend/src/services/history_service.py` | locked atomic JSON persistence và eviction |
+| `backend/src/services/docling_service.py` | converter cache, execution lock, offline artifacts |
+| `backend/src/services/markdown_cleaner.py` | table parser và content-preservation guard |
+| `frontend/src/services/api.ts` | authenticated create/poll/result/cancel client |
+| `frontend/src/App.tsx` | UI orchestration từ trạng thái job thật |
+| `frontend/electron/main.ts` | backend process, userData, offline env, navigation policy |
+| `scripts/prepare-offline-bundle.ps1` | reproducible runtime/model preparation và smoke validation |
 
-**Invariant:** Không được drop content. Nếu bất kỳ bước nào thất bại → giữ nguyên input.
+## 5. Storage
 
-## 5. Công Nghệ Quyết Định
+- Development fallback: `<project>/data`.
+- Packaged app: `<Electron userData>/data` qua `DOCUMARK_DATA_DIR`.
+- `uploads/<uuid>.<ext>` chỉ là file tạm.
+- `outputs/<uuid>.md` chỉ tồn tại cho history entry tương ứng.
+- `history.json` newest-first, giới hạn cấu hình được, ghi temp + `fsync` + atomic replace.
 
-| Quyết định | Lý do |
-|-----------|-------|
-| FastAPI thay vì Django | Nhẹ, async-ready, ideal cho local tool |
-| TableFormerMode.ACCURATE | Xử lý merged cells, multi-row headers chính xác hơn (2-3x chậm hơn FAST nhưng đáng) |
-| WordFormatOption (DOCX) | Direct XML parsing, không cần ML; tốt hơn cho structured content |
-| markdown_cleaner post-processing | Docling raw output có bugs với complex tables; cần clean up layer |
-| Simulated progress (Phase 6) | SSE phức tạp; simulated progress cho UX ngay; SSE cho Phase 7 |
-| MDEditor (@uiw/react-md-editor) | Professional markdown editor với split preview |
+## 6. Deployment/offline
 
-## 6. Ma Trận Diagram
-
-| Type | Status | Notes |
-|------|--------|-------|
-| `system-overview` | **required** | ✅ Có ở mục 1 |
-| `data-flow` | **required** | ✅ Docling pipeline mục 3 |
-| `module-dependencies` | **optional** | ✅ Cleaner architecture mục 4 |
-| `event-flows` | **N/A** | Không có event-driven architecture |
-| `deployment` | **N/A** | Chạy local, không có cloud deployment |
-| `user-use-case` | **N/A** | Single user, single flow đơn giản |
+`electron-builder` đóng `backend/`, `python_runtime/` và `offline_models/` vào resources. Electron chạy Python bằng `-s` và đặt `DOCUMARK_OFFLINE_MODE`, `DOCLING_ARTIFACTS_PATH`, `HF_HUB_OFFLINE`, `TRANSFORMERS_OFFLINE`, `PYTHONNOUSERSITE`. Preflight khởi tạo pipeline với các cờ này; smoke gate có thể chuyển một PDF thật trước khi build installer.
