@@ -73,10 +73,13 @@ const Toolbar: React.FC<ToolbarProps> = ({
   };
 
   return (
-    <div className="h-16 bg-white border-b border-gray-100 flex items-center px-4 justify-between shadow-sm flex-shrink-0 z-10">
-      <div className="flex items-center space-x-4">
-        <div className="flex items-center space-x-2 mr-4">
-          <div className="bg-blue-600 p-1.5 rounded text-white shadow-sm">
+    <div
+      data-testid="main-toolbar"
+      className="min-h-16 bg-white border-b border-gray-100 flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2 shadow-sm flex-shrink-0 z-10"
+    >
+      <div className="flex min-w-0 flex-none items-center">
+        <div className="flex min-w-0 items-center space-x-2">
+          <div className="bg-blue-600 p-1.5 rounded text-white shadow-sm flex-shrink-0">
             <FileText size={18} strokeWidth={1.5} />
           </div>
           <div>
@@ -102,8 +105,11 @@ const Toolbar: React.FC<ToolbarProps> = ({
         </div>
       </div>
 
-      <div className="flex items-center space-x-2">
-        <div className="flex items-center bg-gray-100 rounded-md p-0.5 mr-1">
+      <div
+        data-testid="toolbar-actions"
+        className="flex min-w-0 flex-1 basis-[680px] flex-wrap items-center justify-end gap-2"
+      >
+        <div className="flex flex-none items-center bg-gray-100 rounded-md p-0.5">
           {PREVIEW_MODES.map(({ mode, icon: Icon, label }) => (
             <button
               key={mode}
@@ -125,13 +131,13 @@ const Toolbar: React.FC<ToolbarProps> = ({
           onClick={onVerifyCitation}
           disabled={!canVerifyCitation || isVerifyingCitation}
           title={canVerifyCitation ? 'Kiểm tra trích dẫn/nội dung đã chọn' : 'Bôi đen một đoạn trong bản xem trước để kiểm tra'}
-          className="flex items-center space-x-2 px-3 py-1.5 rounded-md text-[13px] font-medium transition-colors border bg-white hover:bg-gray-50 text-gray-700 border-gray-200 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+          className="flex flex-none items-center space-x-2 whitespace-nowrap px-3 py-1.5 rounded-md text-[13px] font-medium transition-colors border bg-white hover:bg-gray-50 text-gray-700 border-gray-200 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {isVerifyingCitation ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
           <span>{isVerifyingCitation ? 'Đang xác minh...' : 'Xác minh trích dẫn'}</span>
         </button>
 
-        <div className="flex items-center gap-1">
+        <div className="flex flex-none items-center gap-1 whitespace-nowrap">
           <select
             value={translationDirection}
             onChange={(e) => onTranslationDirectionChange(e.target.value as TranslationDirection)}
@@ -160,7 +166,7 @@ const Toolbar: React.FC<ToolbarProps> = ({
           onClick={onTranslate}
           disabled={!canTranslate || isTranslating}
           title={canTranslate ? 'Dịch đoạn đã chọn' : 'Bôi đen một đoạn trong bản xem trước để dịch'}
-          className="flex items-center space-x-2 px-3 py-1.5 rounded-md text-[13px] font-medium transition-colors border bg-white hover:bg-gray-50 text-gray-700 border-gray-200 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+          className="flex flex-none items-center space-x-2 whitespace-nowrap px-3 py-1.5 rounded-md text-[13px] font-medium transition-colors border bg-white hover:bg-gray-50 text-gray-700 border-gray-200 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {isTranslating ? <Loader2 size={14} className="animate-spin" /> : <Languages size={14} />}
           <span>{isTranslating ? 'Đang dịch...' : 'Dịch đoạn đã chọn'}</span>
@@ -168,7 +174,7 @@ const Toolbar: React.FC<ToolbarProps> = ({
 
         <button
           onClick={handleCopy}
-          className={`flex items-center space-x-2 px-3 py-1.5 rounded-md text-[13px] font-medium transition-colors border ${
+          className={`flex flex-none items-center space-x-2 whitespace-nowrap px-3 py-1.5 rounded-md text-[13px] font-medium transition-colors border ${
             copied 
               ? 'bg-green-50 text-green-700 border-green-200 shadow-sm' 
               : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-200 shadow-sm'
@@ -178,20 +184,20 @@ const Toolbar: React.FC<ToolbarProps> = ({
           <span>{copied ? 'Đã chép' : 'Sao chép'}</span>
         </button>
 
-        {sourceFileMetadata && (
-          <button
-            onClick={onOpenOriginal}
-            title={`Mở lại tài liệu gốc: ${sourceFileMetadata.originalFilename}`}
-            className="flex items-center space-x-2 px-3 py-1.5 rounded-md text-[13px] font-medium transition-colors border bg-white hover:bg-gray-50 text-gray-700 border-gray-200 shadow-sm"
-          >
-            <Upload size={14} />
-            <span>Mở tài liệu gốc ({sourceFileMetadata.originalFilename})</span>
-          </button>
-        )}
+        <button
+          onClick={onOpenOriginal}
+          title={sourceFileMetadata
+            ? `Mở lại tài liệu gốc: ${sourceFileMetadata.originalFilename}`
+            : 'Chọn lại tài liệu PDF, DOCX, PPTX hoặc HTML gốc'}
+          className="flex flex-none items-center space-x-2 whitespace-nowrap px-3 py-1.5 rounded-md text-[13px] font-medium transition-colors border bg-white hover:bg-gray-50 text-gray-700 border-gray-200 shadow-sm"
+        >
+          <Upload size={14} />
+          <span>{sourceFileMetadata ? 'Mở tài liệu gốc' : 'Chọn tài liệu gốc'}</span>
+        </button>
 
         <button 
           onClick={onSave}
-          className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-md text-[13px] font-medium transition-colors shadow-sm"
+          className="flex flex-none items-center space-x-2 whitespace-nowrap bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-md text-[13px] font-medium transition-colors shadow-sm"
         >
           <Save size={14} />
           <span>Lưu file</span>

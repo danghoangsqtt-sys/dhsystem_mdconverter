@@ -1,9 +1,9 @@
 # Theo Dõi Tiến Độ (Tracker)
 
 ## Current State
-- **Current Phase:** Phase 10 — Large PDF Reliability & Document Workflow UX
-- **Status:** v1.4.0 installer built, installed and smoke-tested locally — clean-machine gate remains
-- **Version:** 1.4.0
+- **Current Phase:** Phase 11 — Responsive Window UX
+- **Status:** v1.4.1 built, installed, and smoke-tested locally
+- **Version:** 1.4.1
 - **Last Updated:** 2026-08-21
 
 ## Phase Progress
@@ -20,6 +20,7 @@
 | 8 | Reliability, Security & True Offline Packaging | 🟡 Release Gated | Implementation/tests/installer complete; 2 manual gates remain |
 | 9 | Ollama Citation Onboarding | ✅ Complete | Tests, Electron IPC smoke and real qwen2.5:3b inference pass |
 | 10 | Large PDF Reliability & Document Workflow UX | ✅ Complete | 87 backend tests + lint/build + 4 real Electron E2E pass |
+| 11 | Responsive Window UX | ✅ Complete | 820×700 geometry regression + lint/build + 5 Electron E2E pass |
 
 ## Phase 4 Task Detail
 | Task | Description | Status |
@@ -46,3 +47,5 @@
 - **2026-08-21:** NSIS 1.3.2 build và cài đặt local pass; executable đã cài trả `version=1.3.2`, tiêu đề `Mark Tini`, bridge Ollama trả `started`
 - **2026-08-21:** Hoàn tất Phase 10: chặn output PDF thiếu do `partial_success`, xử lý cả thư mục, OCR vùng chuyên dụng, lưu/mở lại tài liệu gốc và panel kết quả kéo giãn; 87 backend tests + 4 Electron E2E pass
 - **2026-08-21:** NSIS 1.4.0 build/cài đặt local đạt; installer và executable đã cài đều trả version 1.4.0, smoke tiến trình phản hồi bình thường
+- **2026-08-21:** Hoàn tất Phase 11: toolbar tự wrap theo cụm, Sidebar không tràn ở chiều rộng hẹp và nút tài liệu gốc luôn hiện; lint/build + React Doctor + 5 Electron E2E đạt
+- **2026-08-21:** Đã tạo bộ cài offline v1.4.1, cài đè thành công (exit code 0), xác minh executable/app.asar cùng phiên bản và smoke-test bản cài đạt

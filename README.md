@@ -5,7 +5,7 @@
   
   **🚀 Chuyển đổi tài liệu sang Markdown — Hoàn toàn ngoại tuyến, chạy cục bộ trên Windows**
 
-  [![Version](https://img.shields.io/badge/version-1.4.0-58A6FF?style=for-the-badge)](CHANGELOG.md)
+  [![Version](https://img.shields.io/badge/version-1.4.1-58A6FF?style=for-the-badge)](CHANGELOG.md)
   [![License](https://img.shields.io/badge/license-MIT-3FB950?style=for-the-badge)](LICENSE)
   [![Platform](https://img.shields.io/badge/platform-Windows-0078D4?style=for-the-badge&logo=windows&logoColor=white)](README.md)
   [![Made with](https://img.shields.io/badge/made%20with-Electron%20%7C%20React-black?style=for-the-badge&logo=electron&logoColor=white)](frontend/package.json)
@@ -115,7 +115,7 @@ Thiết kế chi tiết và các invariant nằm tại [ARCHITECTURE.md](.viepil
 
 ## Tài liệu phiên bản hiện tại
 
-Phiên bản hoàn thiện hiện tại: 1.4.0.
+Phiên bản hoàn thiện hiện tại: 1.4.1.
 
 - [Báo cáo kỹ thuật v1.3.0](docs/bao-cao-ky-thuat-v1.3.0.md)
 - [Hướng dẫn sử dụng v1.3.0](docs/huong-dan-su-dung-v1.3.0.md)
@@ -124,13 +124,13 @@ Phiên bản hoàn thiện hiện tại: 1.4.0.
 
 ## Trạng thái phát hành
 
-v1.4.0 sửa lỗi PDF dài bị lưu thiếu nội dung khi Docling hết bộ nhớ, đồng thời bổ sung xử lý hàng loạt bằng cách chọn cả thư mục. PDF được chia thành cụm trang nhỏ, cụm lỗi tự chia tiếp và trang lỗi được OCR lại ở kích thước an toàn; ứng dụng chỉ lưu kết quả khi đã kiểm tra đủ trang.
+v1.4.1 là bản vá giao diện responsive: toolbar tự xuống hàng khi cửa sổ hẹp, các ô tùy chọn Sidebar không còn chồng lấn và nút chọn/mở tài liệu gốc luôn hiện diện. Bản này kế thừa toàn bộ sửa lỗi PDF dài, OCR vùng và batch thư mục của v1.4.0.
 
 ## 🚀 Cài đặt và sử dụng
 
 ### Cài đặt (Người dùng cuối)
 
-1. **Nhận installer**: Chép file `Mark Tini Setup 1.4.0.exe` từ USB hoặc kênh lưu trữ nội bộ do DHSystem cung cấp
+1. **Nhận installer**: Chép file `Mark Tini Setup 1.4.1.exe` từ USB hoặc kênh lưu trữ nội bộ do DHSystem cung cấp
 2. **Chạy installer**: Double-click file `.exe`, làm theo hướng dẫn
 3. **Khởi chạy**: Mở ứng dụng từ Desktop hoặc Start Menu
 4. **Lần đầu**: Chờ 10-60 giây để nạp model AI (tuỳ thuộc cấu hình máy)
@@ -197,7 +197,7 @@ Quy trình build tự động:
 1. Tạo runtime Python embeddable nếu chưa có
 2. Tải model Docling/EasyOCR/translation vào `offline_models/`
 3. Validate dependency lock (`requirements.lock.txt`)
-4. Build NSIS installer → `frontend/release/Mark Tini Setup 1.4.0.exe`
+4. Build NSIS installer → `frontend/release/Mark Tini Setup 1.4.1.exe`
 
 ---
 
@@ -305,9 +305,11 @@ Kiểm tra:
 
 ## 📊 Trạng thái phát hành
 
-### Phiên bản hiện tại: **v1.4.0** (2026-08-21)
+### Phiên bản hiện tại: **v1.4.1** (2026-08-21)
 
 **Cải tiến chính:**
+- ✅ Toolbar/Sidebar responsive, không chồng lấn khi thu nhỏ cửa sổ
+- ✅ Nút chọn hoặc mở tài liệu gốc luôn hiển thị
 - ✅ Sửa lỗi PDF 128+ trang bị lưu thiếu do `std::bad_alloc`/`partial_success`
 - ✅ Chọn cả thư mục và xử lý nhiều tài liệu theo hàng đợi an toàn bộ nhớ
 - ✅ Khôi phục PDF gốc trực tiếp từ lịch sử sau khi mở lại ứng dụng

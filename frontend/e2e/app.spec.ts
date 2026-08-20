@@ -29,6 +29,7 @@ const electronEnv = Object.fromEntries(
 test.describe.serial('Mark Tini desktop app', () => {
   let electronApp: ElectronApplication;
   let page: Page;
+  let convertedFileName: string;
 
   test.beforeAll(async () => {
     electronApp = await electron.launch({ args: [MAIN_ENTRY], env: electronEnv });
@@ -45,27 +46,96 @@ test.describe.serial('Mark Tini desktop app', () => {
     // Either state is fine here - this test only asserts the renderer
     // mounted correctly, not that the backend has finished starting yet.
     await expect(
-      page.getByRole('button', { name: /Chọn tài liệu|Đang khởi động/ })
+      page.getByRole('button', { name: /^(Chọn tài liệu|Đang khởi động\.\.\.)$/ })
     ).toBeVisible();
     await expect(page.getByRole('button', { name: 'Chọn cả thư mục' })).toBeVisible();
     await expect(page.locator('input[type="file"][webkitdirectory]')).toHaveCount(1);
   });
 
+  test('keeps toolbar and sidebar controls separate in a narrow window', async () => {
+    await electronApp.evaluate(({ BrowserWindow }) => {
+      BrowserWindow.getAllWindows()[0]?.setSize(820, 700);
+    });
+    await page.waitForTimeout(250);
+
+    const layout = await page.evaluate(() => {
+      const inspectGroup = (selector: string) => {
+        const group = document.querySelector<HTMLElement>(selector);
+        if (!group) return { missing: true, overflow: true, overlaps: ['missing'] };
+        const groupRect = group.getBoundingClientRect();
+        const children = Array.from(group.children)
+          .filter((child): child is HTMLElement => child instanceof HTMLElement)
+          .filter((child) => {
+            const style = window.getComputedStyle(child);
+            const rect = child.getBoundingClientRect();
+            return style.display !== 'none' && rect.width > 0 && rect.height > 0;
+          });
+        const overlaps: string[] = [];
+        children.forEach((left, leftIndex) => {
+          const a = left.getBoundingClientRect();
+          children.slice(leftIndex + 1).forEach((right, rightOffset) => {
+            const b = right.getBoundingClientRect();
+            const overlapX = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+            const overlapY = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+            if (overlapX > 1 && overlapY > 1) {
+              overlaps.push(`${leftIndex}-${leftIndex + rightOffset + 1}`);
+            }
+          });
+        });
+        return {
+          missing: false,
+          overflow: children.some((child) => {
+            const rect = child.getBoundingClientRect();
+            return rect.left < groupRect.left - 1 || rect.right > groupRect.right + 1
+              || rect.top < groupRect.top - 1 || rect.bottom > groupRect.bottom + 1;
+          }),
+          overlaps,
+        };
+      };
+
+      const toolbar = document.querySelector<HTMLElement>('[data-testid="main-toolbar"]');
+      const sidebarOptions = document.querySelector<HTMLElement>('[data-testid="sidebar-conversion-options"]');
+      return {
+        toolbar: inspectGroup('[data-testid="toolbar-actions"]'),
+        sidebar: inspectGroup('[data-testid="sidebar-conversion-options"]'),
+        toolbarScrollsHorizontally: Boolean(toolbar && toolbar.scrollWidth > toolbar.clientWidth + 1),
+        sidebarScrollsHorizontally: Boolean(sidebarOptions && sidebarOptions.scrollWidth > sidebarOptions.clientWidth + 1),
+      };
+    });
+
+    expect(layout.toolbar).toEqual({ missing: false, overflow: false, overlaps: [] });
+    expect(layout.sidebar).toEqual({ missing: false, overflow: false, overlaps: [] });
+    expect(layout.toolbarScrollsHorizontally).toBe(false);
+    expect(layout.sidebarScrollsHorizontally).toBe(false);
+    await expect(page.getByRole('button', { name: /Chọn tài liệu gốc|Mở tài liệu gốc/ })).toBeVisible();
+
+    await electronApp.evaluate(({ BrowserWindow }) => {
+      BrowserWindow.getAllWindows()[0]?.setSize(1200, 800);
+    });
+    await page.waitForTimeout(250);
+  });
+
   test('converts a real PDF and shows the extracted text in the editor', async () => {
-    const uploadButton = page.getByRole('button', { name: 'Chọn tài liệu' });
+    const uploadButton = page.getByRole('button', { name: 'Chọn tài liệu', exact: true });
     // Generous timeout: covers real backend startup plus Docling model
     // warm-up (warm_up_models), which the renderer waits out via its own
     // /api/health poll rather than a fixed delay.
     await expect(uploadButton).toBeEnabled({ timeout: 120_000 });
 
     const fileInput = page.locator('input[type="file"][multiple]:not([webkitdirectory])');
-    await fileInput.setInputFiles(SAMPLE_PDF);
+    convertedFileName = `single-${Date.now()}.pdf`;
+    await fileInput.setInputFiles({
+      name: convertedFileName,
+      mimeType: 'application/pdf',
+      buffer: fs.readFileSync(SAMPLE_PDF),
+    });
 
     await expect(page.locator('#root')).toContainText('Mark Tini E2E Fixture', { timeout: 60_000 });
+    await expect(page.getByText(convertedFileName, { exact: true }).first()).toBeVisible({ timeout: 120_000 });
   });
 
   test('restores the original PDF, extracts the full crop, and resizes the result panel', async () => {
-    await page.getByText('sample.pdf', { exact: true }).first().click();
+    await page.getByText(convertedFileName, { exact: true }).first().click();
     await expect(page.getByText('Tài liệu gốc', { exact: true })).toHaveCount(0);
 
     const openOriginal = page.getByRole('button', { name: /Mở tài liệu gốc/ });
@@ -110,7 +180,7 @@ test.describe.serial('Mark Tini desktop app', () => {
   });
 
   test('queues multiple selected documents and keeps both results in history', async () => {
-    const uploadButton = page.getByRole('button', { name: 'Chọn tài liệu' });
+    const uploadButton = page.getByRole('button', { name: 'Chọn tài liệu', exact: true });
     await expect(uploadButton).toBeEnabled({ timeout: 30_000 });
 
     const sampleBuffer = fs.readFileSync(SAMPLE_PDF);

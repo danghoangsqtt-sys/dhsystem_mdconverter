@@ -250,7 +250,7 @@ async def lifespan(_: FastAPI):
 app = FastAPI(
     title="Mark Tini Local API",
     description="Local document-to-Markdown conversion API",
-    version="1.4.0",
+    version="1.4.1",
     lifespan=lifespan,
 )
 

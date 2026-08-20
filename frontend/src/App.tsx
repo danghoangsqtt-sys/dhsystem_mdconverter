@@ -876,7 +876,7 @@ const App: React.FC = () => {
         onDeleteHistoryItem={handleDeleteHistoryItem}
       />
 
-      <div className="flex-1 flex flex-col h-full overflow-hidden relative">
+      <div className="min-w-0 flex-1 flex flex-col h-full overflow-hidden relative">
         <Toolbar
           onSave={handleSave}
           onCopy={handleCopy}

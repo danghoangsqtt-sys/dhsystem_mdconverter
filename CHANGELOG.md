@@ -3,6 +3,14 @@ Tất cả các thay đổi của dự án sẽ được cập nhật tại đâ
 
 ## [Unreleased]
 
+## [1.4.1] — 2026-08-21
+
+### Fixed
+- **Frontend:** Sửa các nút toolbar bị ép co, xuống chữ từng dòng và chồng lên nhau khi thu nhỏ cửa sổ. Toolbar giờ tự xuống hàng theo nguyên cụm, tự tăng chiều cao và giữ nhãn nút trên một dòng.
+- **Frontend:** Sửa hai ô **Ngôn ngữ OCR**/**Chế độ bảng** tràn hoặc dính nhau khi Sidebar hẹp; các ô được giới hạn trong cột và tự chuyển thành một cột khi chiều rộng Sidebar dưới 260 px.
+- **Frontend:** Nút tài liệu gốc giờ luôn hiển thị. Khi chưa có liên kết nguồn, nút mang nhãn **Chọn tài liệu gốc** để người dùng chọn lại PDF/DOCX/PPTX/HTML thay vì biến mất.
+- **Tests:** Thêm Electron E2E ở cửa sổ 820×700, đo trực tiếp vị trí control để chặn tái diễn chồng lấn/tràn ngang; đồng thời làm test conversion dùng tên file duy nhất để không đạt giả từ autosave cũ.
+
 ## [1.4.0] — 2026-08-21
 
 ### Added

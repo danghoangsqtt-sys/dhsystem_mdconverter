@@ -15,13 +15,13 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ icon: Icon, label, onClick, d
   <button
     onClick={onClick}
     disabled={disabled}
-    className={`w-full flex items-center space-x-3 px-3 py-2 text-sm font-medium transition-colors rounded-md
+    className={`w-full min-w-0 flex items-center space-x-3 px-3 py-2 text-sm font-medium transition-colors rounded-md
       ${active ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'}
       ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}
     `}
   >
-    <Icon size={18} strokeWidth={1.5} />
-    <span>{label}</span>
+    <Icon size={18} strokeWidth={1.5} className="flex-shrink-0" />
+    <span className="min-w-0 truncate whitespace-nowrap">{label}</span>
   </button>
 );
 
@@ -196,7 +196,7 @@ const Sidebar: React.FC<SidebarProps> = ({
               onClick={() => pdfInputRef.current?.click()}
               disabled={uploadDisabled}
               title={!backendReady ? backendDetail : undefined}
-              className={`w-full flex items-center justify-center space-x-2 py-2 px-3 rounded-md border transition-all shadow-sm group
+              className={`w-full min-w-0 flex items-center justify-center space-x-2 py-2 px-3 rounded-md border transition-all shadow-sm group
                 ${uploadDisabled
                   ? 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed'
                   : 'border-[#e5e7eb] bg-white text-gray-800 hover:bg-gray-50'
@@ -204,11 +204,11 @@ const Sidebar: React.FC<SidebarProps> = ({
               `}
             >
               {isProcessing || (!backendReady && !backendFailed) ? (
-                <RefreshCcw size={20} className="animate-spin" />
+                <RefreshCcw size={20} className="animate-spin flex-shrink-0" />
               ) : (
-                <Upload size={20} className="group-hover:scale-110 transition-transform" />
+                <Upload size={20} className="group-hover:scale-110 transition-transform flex-shrink-0" />
               )}
-              <span className="font-semibold">
+              <span className="min-w-0 truncate whitespace-nowrap font-semibold">
                 {isProcessing ? 'Đang xử lý...' : !backendReady ? 'Đang khởi động...' : 'Chọn tài liệu'}
               </span>
             </button>
@@ -218,15 +218,15 @@ const Sidebar: React.FC<SidebarProps> = ({
               onClick={() => folderInputRef.current?.click()}
               disabled={uploadDisabled}
               title={backendReady ? 'Chọn một thư mục và xử lý tuần tự các tài liệu được hỗ trợ' : backendDetail}
-              className={`w-full mt-2 flex items-center justify-center gap-2 py-1.5 px-3 rounded-md border text-xs font-semibold transition-colors
+              className={`w-full min-w-0 mt-2 flex items-center justify-center gap-2 py-1.5 px-3 rounded-md border text-xs font-semibold transition-colors
                 ${uploadDisabled
                   ? 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed'
                   : 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100'
                 }
               `}
             >
-              <FolderOpen size={16} />
-              <span>Chọn cả thư mục</span>
+              <FolderOpen size={16} className="flex-shrink-0" />
+              <span className="min-w-0 truncate whitespace-nowrap">Chọn cả thư mục</span>
             </button>
 
             {/* .doc (legacy binary Word) is deliberately excluded: docling only
@@ -245,31 +245,34 @@ const Sidebar: React.FC<SidebarProps> = ({
             />
             <input type="file" ref={mdInputRef} onChange={handleMdChange} accept=".md,.markdown,.txt" className="hidden" />
 
-            <div className="grid grid-cols-2 gap-1.5 mt-2.5">
-              <label className="flex flex-col gap-0.5">
-                <span className="flex items-center gap-1 text-[10px] font-medium text-gray-400">
+            <div
+              data-testid="sidebar-conversion-options"
+              className={`grid gap-1.5 mt-2.5 ${width < 260 ? 'grid-cols-1' : 'grid-cols-2'}`}
+            >
+              <label className="min-w-0 flex flex-col gap-0.5">
+                <span className="flex min-w-0 items-center gap-1 truncate whitespace-nowrap text-[10px] font-medium text-gray-400">
                   <Languages size={11} /> Ngôn ngữ OCR
                 </span>
                 <select
                   value={ocrLang}
                   onChange={(e) => onOcrLangChange(e.target.value as OcrLang)}
                   disabled={isProcessing}
-                  className="text-[11px] border border-gray-200 rounded px-1.5 py-1 bg-white text-gray-700 disabled:opacity-50"
+                  className="w-full min-w-0 truncate text-[11px] border border-gray-200 rounded px-1.5 py-1 bg-white text-gray-700 disabled:opacity-50"
                 >
                   {OCR_LANG_OPTIONS.map(opt => (
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
                   ))}
                 </select>
               </label>
-              <label className="flex flex-col gap-0.5">
-                <span className="flex items-center gap-1 text-[10px] font-medium text-gray-400">
+              <label className="min-w-0 flex flex-col gap-0.5">
+                <span className="flex min-w-0 items-center gap-1 truncate whitespace-nowrap text-[10px] font-medium text-gray-400">
                   <Table2 size={11} /> Chế độ bảng
                 </span>
                 <select
                   value={tableMode}
                   onChange={(e) => onTableModeChange(e.target.value as TableMode)}
                   disabled={isProcessing}
-                  className="text-[11px] border border-gray-200 rounded px-1.5 py-1 bg-white text-gray-700 disabled:opacity-50"
+                  className="w-full min-w-0 truncate text-[11px] border border-gray-200 rounded px-1.5 py-1 bg-white text-gray-700 disabled:opacity-50"
                 >
                   {TABLE_MODE_OPTIONS.map(opt => (
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -336,7 +339,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                 </div>
                 <div>
                   <p className="font-bold text-gray-800 leading-tight">Mark Tini</p>
-                  <p className="text-[10px] text-gray-400">Phiên bản 1.4.0</p>
+                  <p className="text-[10px] text-gray-400">Phiên bản 1.4.1</p>
                 </div>
               </div>
 

@@ -163,3 +163,18 @@
 - [x] Lưu tài liệu gốc theo lịch sử và mở lại PDF sau khi khởi động ứng dụng.
 - [x] Thêm tay nắm kéo dọc cho bảng vùng đã trích xuất.
 - [x] 87 backend tests, lint/build, React Doctor changed-scope và 4 Electron E2E đạt.
+
+---
+
+## Phase 11: Responsive Window UX ✅ COMPLETE
+
+**Mục tiêu:** Giữ mọi control toolbar/Sidebar tách biệt, dễ đọc và thao tác được khi thu nhỏ cửa sổ ứng dụng.
+
+**SPEC:** `.viepilot/phases/phase-11-responsive-window/SPEC.md`
+
+### Tasks
+
+- [x] **T11.1** Cho toolbar wrap theo nguyên cụm, tự tăng chiều cao và cấm bẻ chữ trong nút.
+- [x] Ràng buộc kích thước select Sidebar; chuyển về một cột khi Sidebar dưới 260 px.
+- [x] Luôn hiển thị nút chọn/mở tài liệu gốc.
+- [x] Thêm E2E 820×700 đo overlap/overflow; tổng cộng 5 Electron E2E đạt.

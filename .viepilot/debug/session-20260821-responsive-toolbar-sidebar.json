@@ -1,0 +1,46 @@
+{
+  "id": "debug-20260821-responsive-toolbar-sidebar",
+  "status": "resolved",
+  "created_at": "2026-08-21T02:00:00+07:00",
+  "updated_at": "2026-08-21T02:00:00+07:00",
+  "problem": {
+    "description": "Control tren toolbar va hai o tuy chon Sidebar dinh/chong nhau khi thu nho cua so ung dung.",
+    "symptoms": [
+      "Nhan nut toolbar bi ep thanh nhieu dong va tran khoi thanh cao 64 px.",
+      "Hai select OCR/table ep grid vuot qua chieu rong Sidebar."
+    ],
+    "error_messages": [],
+    "affected_files": [
+      "frontend/src/components/Toolbar.tsx",
+      "frontend/src/components/Sidebar.tsx",
+      "frontend/src/App.tsx"
+    ]
+  },
+  "investigation": {
+    "hypotheses": [
+      {"id": 1, "description": "Toolbar co chieu cao co dinh va flex item duoc shrink/break text.", "status": "confirmed"},
+      {"id": 2, "description": "Grid Sidebar thieu min-w-0/w-full va khong doi layout theo chieu rong.", "status": "confirmed"}
+    ],
+    "tests_run": [
+      {"command": "Electron E2E setSize(820, 700)", "output": "Do hinh hoc direct children cua toolbar/sidebar; khong overlap va khong overflow sau fix."},
+      {"command": "npm run lint && npm run build && npm run test:e2e", "output": "Lint/build pass; 5 E2E pass."},
+      {"command": "react-doctor --scope changed", "output": "Chi con intentional sequential batch warning."}
+    ],
+    "findings": [
+      "Toolbar dung h-16 va mot flex row, trong khi tong min-content rong hon main pane.",
+      "Button khong co whitespace-nowrap/flex-none nen label bi be tung dong.",
+      "Select la grid item co min-width auto nen noi dung option ep cot tran khoi Sidebar."
+    ]
+  },
+  "resolution": {
+    "root_cause": "Fixed-height single-row toolbar cho phep shrink text; Sidebar grid khong co min-size constraints/container-width fallback.",
+    "fix_applied": "Toolbar flex-wrap theo whole controls voi min-height auto; button nowrap/flex-none; main pane min-w-0; Sidebar select w-full/min-w-0 va grid mot cot duoi 260 px; source button luon hien.",
+    "files_changed": [
+      "frontend/src/components/Toolbar.tsx",
+      "frontend/src/components/Sidebar.tsx",
+      "frontend/src/App.tsx",
+      "frontend/e2e/app.spec.ts"
+    ],
+    "verification": "Lint/build, React Doctor changed scope va 5 Electron E2E pass, gom geometry test 820x700."
+  }
+}
