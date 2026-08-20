@@ -5,7 +5,7 @@
   
   **🚀 Chuyển đổi tài liệu sang Markdown — Hoàn toàn ngoại tuyến, chạy cục bộ trên Windows**
 
-  [![Version](https://img.shields.io/badge/version-1.4.1-58A6FF?style=for-the-badge)](CHANGELOG.md)
+  [![Version](https://img.shields.io/badge/version-1.5.0-58A6FF?style=for-the-badge)](CHANGELOG.md)
   [![License](https://img.shields.io/badge/license-MIT-3FB950?style=for-the-badge)](LICENSE)
   [![Platform](https://img.shields.io/badge/platform-Windows-0078D4?style=for-the-badge&logo=windows&logoColor=white)](README.md)
   [![Made with](https://img.shields.io/badge/made%20with-Electron%20%7C%20React-black?style=for-the-badge&logo=electron&logoColor=white)](frontend/package.json)
@@ -51,6 +51,7 @@ Từ phiên bản **v1.2.0** trở lên, Mark Tini sử dụng:
 | Tính năng | Mô tả |
 |-----------|--------|
 | 📄 **Chuyển đổi đa định dạng** | PDF, DOCX, PPTX, HTML, ảnh (PNG, JPEG, TIFF, BMP) |
+| 🧾 **Xuất Word giống PDF** | Chuyển toàn bộ trang PDF sang DOCX bằng ảnh lossless, giữ nguyên nội dung, công thức, sơ đồ và hình ảnh |
 | 🗣️ **OCR Việt/Anh** | Lựa chọn ngôn ngữ: `vi+en`, `vi`, hoặc `en` tùy theo tài liệu |
 | 📊 **Nhận dạng bảng thông minh** | Hai chế độ: `Accurate` (chính xác) hoặc `Fast` (nhanh) |
 | ✂️ **Trích xuất vùng PDF** | Vẽ khung chọn để OCR riêng một vùng, không phải cả trang |
@@ -115,7 +116,7 @@ Thiết kế chi tiết và các invariant nằm tại [ARCHITECTURE.md](.viepil
 
 ## Tài liệu phiên bản hiện tại
 
-Phiên bản hoàn thiện hiện tại: 1.4.1.
+Phiên bản hoàn thiện hiện tại: 1.5.0.
 
 - [Báo cáo kỹ thuật v1.3.0](docs/bao-cao-ky-thuat-v1.3.0.md)
 - [Hướng dẫn sử dụng v1.3.0](docs/huong-dan-su-dung-v1.3.0.md)
@@ -124,13 +125,13 @@ Phiên bản hoàn thiện hiện tại: 1.4.1.
 
 ## Trạng thái phát hành
 
-v1.4.1 là bản vá giao diện responsive: toolbar tự xuống hàng khi cửa sổ hẹp, các ô tùy chọn Sidebar không còn chồng lấn và nút chọn/mở tài liệu gốc luôn hiện diện. Bản này kế thừa toàn bộ sửa lỗi PDF dài, OCR vùng và batch thư mục của v1.4.0.
+v1.5.0 bổ sung **Xuất Word giống PDF**: toàn bộ trang PDF được nhúng lossless vào DOCX theo đúng kích thước và hướng trang, giữ nguyên văn bản, công thức, sơ đồ khối và hình ảnh. Vì ưu tiên hình thức giống PDF, nội dung trong Word là ảnh toàn trang và không chỉnh sửa riêng từng chữ.
 
 ## 🚀 Cài đặt và sử dụng
 
 ### Cài đặt (Người dùng cuối)
 
-1. **Nhận installer**: Chép file `Mark Tini Setup 1.4.1.exe` từ USB hoặc kênh lưu trữ nội bộ do DHSystem cung cấp
+1. **Nhận installer**: Chép file `Mark Tini Setup 1.5.0.exe` từ USB hoặc kênh lưu trữ nội bộ do DHSystem cung cấp
 2. **Chạy installer**: Double-click file `.exe`, làm theo hướng dẫn
 3. **Khởi chạy**: Mở ứng dụng từ Desktop hoặc Start Menu
 4. **Lần đầu**: Chờ 10-60 giây để nạp model AI (tuỳ thuộc cấu hình máy)
@@ -197,7 +198,7 @@ Quy trình build tự động:
 1. Tạo runtime Python embeddable nếu chưa có
 2. Tải model Docling/EasyOCR/translation vào `offline_models/`
 3. Validate dependency lock (`requirements.lock.txt`)
-4. Build NSIS installer → `frontend/release/Mark Tini Setup 1.4.1.exe`
+4. Build NSIS installer → `frontend/release/Mark Tini Setup 1.5.0.exe`
 
 ---
 
@@ -305,9 +306,11 @@ Kiểm tra:
 
 ## 📊 Trạng thái phát hành
 
-### Phiên bản hiện tại: **v1.4.1** (2026-08-21)
+### Phiên bản hiện tại: **v1.5.0** (2026-08-21)
 
 **Cải tiến chính:**
+- ✅ Xuất toàn bộ PDF sang Word bằng ảnh lossless, giữ nguyên công thức, sơ đồ, hình ảnh và từng hướng/khổ trang
+- ✅ Hộp thoại Lưu thành cho phép chọn trực tiếp USB; có thể xuất lại PDF gốc từ lịch sử
 - ✅ Toolbar/Sidebar responsive, không chồng lấn khi thu nhỏ cửa sổ
 - ✅ Nút chọn hoặc mở tài liệu gốc luôn hiển thị
 - ✅ Sửa lỗi PDF 128+ trang bị lưu thiếu do `std::bad_alloc`/`partial_success`

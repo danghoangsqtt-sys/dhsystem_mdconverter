@@ -339,7 +339,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                 </div>
                 <div>
                   <p className="font-bold text-gray-800 leading-tight">Mark Tini</p>
-                  <p className="text-[10px] text-gray-400">Phiên bản 1.4.1</p>
+                  <p className="text-[10px] text-gray-400">Phiên bản 1.5.0</p>
                 </div>
               </div>
 

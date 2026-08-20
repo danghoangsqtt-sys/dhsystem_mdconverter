@@ -27,10 +27,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from starlette.background import BackgroundTask
 
 from .config import settings
 from .logging_utils import CorrelationIdMiddleware, configure_logging
 from .services import citation_service, history_service, translation_service
+from .services import pdf_to_word_service
 from .services.docling_service import (
     DEFAULT_OCR_LANG,
     DEFAULT_TABLE_MODE,
@@ -177,6 +179,13 @@ job_manager = ConversionJobManager(
     max_history_entries=settings.max_history_entries,
     max_job_records=settings.max_job_records,
 )
+pdf_to_word_export_lock = threading.Lock()
+
+
+def _convert_pdf_to_word_serialized(pdf_path: Path, output_path: Path) -> pdf_to_word_service.PdfToWordResult:
+    """Avoid multiple large raster exports competing for memory at once."""
+    with pdf_to_word_export_lock:
+        return pdf_to_word_service.convert_pdf_to_docx(pdf_path, output_path)
 
 
 def _cleanup_stale_uploads() -> None:
@@ -250,7 +259,7 @@ async def lifespan(_: FastAPI):
 app = FastAPI(
     title="Mark Tini Local API",
     description="Local document-to-Markdown conversion API",
-    version="1.4.1",
+    version="1.5.0",
     lifespan=lifespan,
 )
 
@@ -430,6 +439,68 @@ async def download_file(job_id: uuid.UUID) -> FileResponse:
         original = str(entry.get("original_filename", ""))
         download_name = f"{Path(original).stem or job_id_text}.md"
     return FileResponse(path=file_path, filename=download_name, media_type="text/markdown")
+
+
+@secure_api.post("/export/pdf-to-word")
+async def export_pdf_to_word(file: UploadFile = File(...)) -> FileResponse:
+    """Create a visually faithful DOCX by placing every PDF page losslessly.
+
+    This deliberately preserves appearance rather than editability: arbitrary
+    PDF content cannot be reconstructed as native Word objects without layout
+    changes, while a full-page raster retains text, formulae, diagrams, and
+    images exactly as rendered by the PDF engine.
+    """
+    original_filename, extension = _safe_original_filename(file.filename)
+    if extension != ".pdf":
+        await file.close()
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Tính năng xuất Word giữ nguyên bố cục chỉ nhận file PDF.",
+        )
+
+    export_id = str(uuid.uuid4())
+    upload_path = settings.upload_dir / f"{export_id}.pdf"
+    output_path = settings.output_dir / f"{export_id}.docx"
+    try:
+        await asyncio.to_thread(
+            _copy_upload_with_limit,
+            file.file,
+            upload_path,
+            settings.max_upload_bytes,
+        )
+    except UploadTooLargeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"File vượt giới hạn {settings.max_upload_bytes // (1024 * 1024)} MiB.",
+        ) from exc
+    except OSError as exc:
+        logger.exception("Failed to persist PDF for Word export")
+        raise HTTPException(status_code=500, detail="Không thể lưu PDF để tạo file Word.") from exc
+    finally:
+        await file.close()
+
+    try:
+        await asyncio.to_thread(_validate_uploaded_content, upload_path, extension)
+        result = await asyncio.to_thread(_convert_pdf_to_word_serialized, upload_path, output_path)
+    except UploadContentMismatchError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Nội dung file không phải là PDF hợp lệ.",
+        ) from exc
+    except pdf_to_word_service.PdfToWordConversionError as exc:
+        logger.exception("PDF-to-Word export failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    finally:
+        upload_path.unlink(missing_ok=True)
+
+    download_name = f"{Path(original_filename).stem or 'tai-lieu'}-giong-pdf.docx"
+    return FileResponse(
+        path=result.output_path,
+        filename=download_name,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"X-DocuMark-Page-Count": str(result.page_count)},
+        background=BackgroundTask(result.output_path.unlink, missing_ok=True),
+    )
 
 
 @secure_api.get("/history")

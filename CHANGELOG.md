@@ -3,6 +3,17 @@ Tất cả các thay đổi của dự án sẽ được cập nhật tại đâ
 
 ## [Unreleased]
 
+## [1.5.0] — 2026-08-21
+
+### Added
+- **Backend:** Thêm route `POST /api/export/pdf-to-word` và dịch vụ `pdf_to_word_service.py`, render tuần tự toàn bộ trang PDF ở 180 DPI thành PNG lossless rồi nhúng mỗi trang vào một section Word đúng kích thước/hướng. Văn bản, công thức, sơ đồ khối và hình ảnh giữ nguyên hình thức như PDF; nội dung trong DOCX là ảnh toàn trang nên không chỉnh sửa từng chữ.
+- **Frontend:** Thêm nút **Xuất Word giống PDF** trên toolbar. Có thể xuất PDF đang mở hoặc tự khôi phục PDF gốc đã lưu trong lịch sử, hiển thị trạng thái xử lý và thời gian chờ phù hợp với tài liệu dài.
+- **Electron:** Thêm bridge lưu Word chuyên dụng và hộp thoại **Lưu thành**, cho phép chọn trực tiếp ổ USB. Tên file/đuôi `.docx` và dữ liệu được kiểm tra trước khi main process ghi file.
+
+### Changed
+- **Reliability:** Các lượt xuất Word được tuần tự hóa để nhiều PDF lớn không tranh bộ nhớ; upload/output tạm được dọn trên mọi trạng thái và file DOCX phía backend được xóa ngay sau khi gửi xong.
+- **Tests:** Tăng lên 94 backend tests và 6 Electron E2E. Bổ sung kiểm tra PDF hai trang dọc/ngang, số section/ảnh neo, kích thước trang, token/API security, lưu native và so sánh ảnh nhúng với PDF nguồn từng pixel.
+
 ## [1.4.1] — 2026-08-21
 
 ### Fixed

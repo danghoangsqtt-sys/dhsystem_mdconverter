@@ -357,6 +357,45 @@ ipcMain.handle('open-external', async (_event, url: string) => {
   await shell.openExternal(url);
 });
 
+type SaveWordFileResult =
+  | { status: 'saved'; filePath: string }
+  | { status: 'cancelled' };
+
+ipcMain.handle(
+  'save-word-file',
+  async (event, requestedName: unknown, bytes: unknown): Promise<SaveWordFileResult> => {
+    if (typeof requestedName !== 'string') {
+      throw new Error('Tên file Word không hợp lệ.');
+    }
+    const safeName = path.basename(requestedName.trim());
+    if (!safeName || safeName.length > 255 || !safeName.toLowerCase().endsWith('.docx')) {
+      throw new Error('Tên file Word không hợp lệ.');
+    }
+    const data = bytes instanceof Uint8Array
+      ? bytes
+      : bytes instanceof ArrayBuffer
+        ? new Uint8Array(bytes)
+        : null;
+    if (!data || data.byteLength === 0) {
+      throw new Error('Dữ liệu file Word trống hoặc không hợp lệ.');
+    }
+
+    const owner = BrowserWindow.fromWebContents(event.sender);
+    const options = {
+      title: 'Lưu file Word giống PDF',
+      defaultPath: path.join(app.getPath('documents'), safeName),
+      filters: [{ name: 'Tài liệu Microsoft Word', extensions: ['docx'] }],
+    };
+    const selection = owner
+      ? await dialog.showSaveDialog(owner, options)
+      : await dialog.showSaveDialog(options);
+    if (selection.canceled || !selection.filePath) return { status: 'cancelled' };
+
+    await fs.promises.writeFile(selection.filePath, data);
+    return { status: 'saved', filePath: selection.filePath };
+  },
+);
+
 // Purpose-specific bridge: the renderer can request the known local Ollama
 // service, but cannot choose an executable or pass arbitrary arguments.
 ipcMain.handle('ensure-ollama', async (): Promise<OllamaStartupStatus> => ensureOllama());

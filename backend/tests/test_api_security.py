@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 from dataclasses import replace
+from pathlib import Path
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
@@ -131,6 +132,40 @@ class ApiSecurityTests(unittest.TestCase):
     def test_translate_requires_session_token(self) -> None:
         response = self.client.post("/api/translate", json={"text": "some text"})
         self.assertEqual(response.status_code, 401)
+
+    def test_pdf_to_word_export_requires_session_token(self) -> None:
+        response = self.client.post(
+            "/api/export/pdf-to-word",
+            files={"file": ("paper.pdf", b"%PDF-1.4", "application/pdf")},
+        )
+        self.assertEqual(response.status_code, 401)
+
+    def test_pdf_to_word_export_rejects_non_pdf_before_processing(self) -> None:
+        response = self.client.post(
+            "/api/export/pdf-to-word",
+            headers=self.auth,
+            files={"file": ("paper.docx", b"PK", "application/octet-stream")},
+        )
+        self.assertEqual(response.status_code, 415)
+        self.assertIn("chỉ nhận file PDF", response.json()["detail"])
+
+    def test_pdf_to_word_export_returns_complete_docx_and_cleans_temporary_files(self) -> None:
+        sample_pdf = Path(__file__).resolve().parents[2] / "frontend" / "e2e" / "fixtures" / "sample.pdf"
+        uploads_before = set(main.settings.upload_dir.glob("*"))
+        docx_before = set(main.settings.output_dir.glob("*.docx"))
+
+        response = self.client.post(
+            "/api/export/pdf-to-word",
+            headers=self.auth,
+            files={"file": ("fixture.pdf", sample_pdf.read_bytes(), "application/pdf")},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.content.startswith(b"PK"))
+        self.assertEqual(response.headers["x-documark-page-count"], "1")
+        self.assertIn("fixture-giong-pdf.docx", response.headers["content-disposition"])
+        self.assertEqual(uploads_before, set(main.settings.upload_dir.glob("*")))
+        self.assertEqual(docx_before, set(main.settings.output_dir.glob("*.docx")))
 
     def test_root_serves_built_frontend_instead_of_api_message(self) -> None:
         """Regression test: `read_root`'s JSON message used to be registered

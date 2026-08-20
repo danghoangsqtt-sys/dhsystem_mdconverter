@@ -178,3 +178,18 @@
 - [x] Ràng buộc kích thước select Sidebar; chuyển về một cột khi Sidebar dưới 260 px.
 - [x] Luôn hiển thị nút chọn/mở tài liệu gốc.
 - [x] Thêm E2E 820×700 đo overlap/overflow; tổng cộng 5 Electron E2E đạt.
+
+---
+
+## Phase 12: Faithful PDF-to-Word Export ✅ COMPLETE
+
+**Mục tiêu:** Xuất toàn bộ PDF sang DOCX với hình thức không thay đổi đối với văn bản, công thức, sơ đồ và hình ảnh, đồng thời xử lý ổn định tài liệu nhiều trang hoàn toàn offline.
+
+**SPEC:** `.viepilot/phases/phase-12-pdf-to-word-fidelity/SPEC.md`
+
+### Tasks
+
+- [x] **T12.1** Render tuần tự từng trang PDF thành PNG lossless và đặt làm ảnh neo toàn trang trong section Word đúng kích thước/hướng.
+- [x] Thêm API có token, content sniffing, giới hạn upload, serialization và cleanup đầy đủ.
+- [x] Thêm nút xuất Word từ PDF đang mở/PDF lịch sử và hộp thoại lưu native chọn được USB.
+- [x] Kiểm chứng pixel-identical, PDF dọc/ngang, 94 backend tests, lint/build, React Doctor và 6 Electron E2E.

@@ -6,6 +6,7 @@ const API_TOKEN_HEADER = 'X-DocuMark-Token';
 const POLL_INTERVAL_MS = 750;
 // Increased timeout for large PDFs (100+ pages with OCR/tables can take 5-10 minutes)
 const CONVERSION_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+const PDF_TO_WORD_TIMEOUT_MS = 15 * 60 * 1000;
 
 let browserTokenPromise: Promise<string> | null = null;
 
@@ -126,6 +127,18 @@ const getErrorMessage = (error: unknown, fallback: string): string => {
   return fallback;
 };
 
+const getBlobErrorMessage = async (error: unknown, fallback: string): Promise<string> => {
+  if (!axios.isAxiosError(error) || !error.response) return fallback;
+  const data = error.response.data;
+  if (!(data instanceof Blob)) return getErrorMessage(error, fallback);
+  try {
+    const parsed = JSON.parse(await data.text());
+    return typeof parsed?.detail === 'string' ? parsed.detail : fallback;
+  } catch {
+    return fallback;
+  }
+};
+
 export const createConversionJob = async (
   file: File,
   options: UploadOptions = {},
@@ -243,6 +256,35 @@ export const fetchHistoryOriginal = async (jobId: string): Promise<Blob> => {
   } catch (error) {
     throw new Error(
       getErrorMessage(error, 'Không thể khôi phục tài liệu gốc.'),
+      { cause: error },
+    );
+  }
+};
+
+export const exportPdfToWord = async (
+  file: File,
+  onUploadProgress?: UploadProgressCallback,
+): Promise<Blob> => {
+  const formData = new FormData();
+  formData.append('file', file);
+  try {
+    const response = await axios.post<Blob>(`${API_BASE_URL}/export/pdf-to-word`, formData, {
+      headers: {
+        ...(await authHeaders()),
+        'Content-Type': 'multipart/form-data',
+      },
+      responseType: 'blob',
+      timeout: PDF_TO_WORD_TIMEOUT_MS,
+      onUploadProgress: event => {
+        if (onUploadProgress && event.total) {
+          onUploadProgress(Math.round((event.loaded * 100) / event.total));
+        }
+      },
+    });
+    return response.data;
+  } catch (error) {
+    throw new Error(
+      await getBlobErrorMessage(error, 'Không thể tạo file Word giữ nguyên bố cục PDF.'),
       { cause: error },
     );
   }

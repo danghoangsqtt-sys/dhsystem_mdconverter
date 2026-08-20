@@ -14,6 +14,7 @@ import {
   fetchHistory,
   fetchHistoryItem,
   fetchHistoryOriginal,
+  exportPdfToWord,
   deleteHistoryItem,
   cancelConversionJob,
   verifyCitation,
@@ -202,6 +203,7 @@ const App: React.FC = () => {
   const [tableMode, setTableMode] = useState<TableMode>('accurate');
   const [sourceFileMetadata, setSourceFileMetadata] = useState<SourceFileMetadata | null>(null);
   const sourceHistoryJobIdRef = useRef<string | null>(null);
+  const [isExportingWord, setIsExportingWord] = useState(false);
 
   const addToast = useCallback((type: 'success' | 'error' | 'info', message: string) => {
     dispatch({ type: 'ADD_TOAST', payload: { id: Date.now(), type, message } });
@@ -778,6 +780,56 @@ const App: React.FC = () => {
     originalInputRef.current?.click();
   }, [restoreOriginalFile, sourceFileMetadata]);
 
+  const handleExportWord = useCallback(async () => {
+    if (isExportingWord) return;
+    setIsExportingWord(true);
+    try {
+      let pdfFile = sourceFile;
+      const sourceHistoryJobId = sourceHistoryJobIdRef.current;
+      if (!pdfFile && sourceHistoryJobId && sourceFileMetadata?.originalFilename.toLowerCase().endsWith('.pdf')) {
+        const originalBlob = await fetchHistoryOriginal(sourceHistoryJobId);
+        pdfFile = new File(
+          [originalBlob],
+          sourceFileMetadata.originalFilename,
+          { type: originalBlob.type || 'application/pdf' },
+        );
+      }
+      if (!pdfFile || !pdfFile.name.toLowerCase().endsWith('.pdf')) {
+        addToast('info', 'Hãy mở một tài liệu PDF gốc trước khi xuất sang Word.');
+        return;
+      }
+
+      addToast('info', 'Đang tạo Word giữ nguyên từng trang PDF. Tài liệu dài có thể cần vài phút.');
+      const wordBlob = await exportPdfToWord(pdfFile);
+      const wordFileName = `${pdfFile.name.replace(/\.pdf$/i, '')}-giong-pdf.docx`;
+      if (window.documark?.saveWordFile) {
+        const result = await window.documark.saveWordFile(
+          wordFileName,
+          new Uint8Array(await wordBlob.arrayBuffer()),
+        );
+        if (result.status === 'cancelled') {
+          addToast('info', 'Đã hủy lưu file Word.');
+          return;
+        }
+      } else {
+        const url = URL.createObjectURL(wordBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = wordFileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+      addToast('success', 'Đã tạo file Word giữ nguyên nội dung và bố cục PDF.');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Không thể xuất PDF sang Word.';
+      addToast('error', message);
+    } finally {
+      setIsExportingWord(false);
+    }
+  }, [addToast, isExportingWord, sourceFile, sourceFileMetadata]);
+
   const resetDocument = useCallback(() => {
     // Invalidate any in-flight conversion so its eventual response can't
     // clobber the blank document we're about to show.
@@ -881,11 +933,9 @@ const App: React.FC = () => {
           onSave={handleSave}
           onCopy={handleCopy}
           onVerifyCitation={handleVerifyCitation}
-          canVerifyCitation={hasSelection}
-          isVerifyingCitation={isVerifyingCitation}
+          citationState={isVerifyingCitation ? 'running' : hasSelection ? 'ready' : 'disabled'}
           onTranslate={handleTranslate}
-          canTranslate={hasSelection}
-          isTranslating={isTranslating}
+          translationState={isTranslating ? 'running' : hasSelection ? 'ready' : 'disabled'}
           translationDirection={translationDirection}
           onTranslationDirectionChange={setTranslationDirection}
           translationDomain={translationDomain}
@@ -896,6 +946,15 @@ const App: React.FC = () => {
           onPreviewModeChange={setPreviewMode}
           sourceFileMetadata={sourceFileMetadata}
           onOpenOriginal={handleOpenOriginal}
+          onExportWord={handleExportWord}
+          wordExportState={isExportingWord
+            ? 'running'
+            : state.backend.status === 'ready'
+              && !state.processingState.isProcessing
+              && (Boolean(sourceFile?.name.toLowerCase().endsWith('.pdf'))
+                || Boolean(sourceFileMetadata?.originalFilename.toLowerCase().endsWith('.pdf')))
+              ? 'ready'
+              : 'disabled'}
         />
 
         <div className="flex-1 overflow-hidden relative bg-neutral-100 p-4">

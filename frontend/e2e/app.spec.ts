@@ -134,7 +134,26 @@ test.describe.serial('Mark Tini desktop app', () => {
     await expect(page.getByText(convertedFileName, { exact: true }).first()).toBeVisible({ timeout: 120_000 });
   });
 
+  test('exports the complete original PDF as a faithful Word document', async ({ browserName }, testInfo) => {
+    expect(browserName).toBe('chromium');
+    const exportButton = page.getByRole('button', { name: 'Xuất Word giống PDF', exact: true });
+    await expect(exportButton).toBeEnabled({ timeout: 30_000 });
+
+    const exportedPath = testInfo.outputPath(convertedFileName.replace(/\.pdf$/i, '-giong-pdf.docx'));
+    fs.mkdirSync(path.dirname(exportedPath), { recursive: true });
+    await electronApp.evaluate(({ dialog }, targetPath) => {
+      dialog.showSaveDialog = async () => ({ canceled: false, filePath: targetPath });
+    }, exportedPath);
+    await exportButton.click();
+    await expect(page.getByText('Đã tạo file Word giữ nguyên nội dung và bố cục PDF.')).toBeVisible({ timeout: 30_000 });
+    await expect.poll(() => fs.existsSync(exportedPath)).toBe(true);
+    const bytes = fs.readFileSync(exportedPath);
+    expect(bytes.length).toBeGreaterThan(1_000);
+    expect(bytes.subarray(0, 2).toString('ascii')).toBe('PK');
+  });
+
   test('restores the original PDF, extracts the full crop, and resizes the result panel', async () => {
+    await page.evaluate(() => localStorage.setItem('marktini_extraction_panel_height', '240'));
     await page.getByText(convertedFileName, { exact: true }).first().click();
     await expect(page.getByText('Tài liệu gốc', { exact: true })).toHaveCount(0);
 

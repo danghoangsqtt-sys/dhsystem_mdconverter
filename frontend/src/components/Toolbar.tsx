@@ -10,22 +10,23 @@ import {
   Eye,
   ShieldCheck,
   Languages,
-  Upload
+  Upload,
+  FileDown
 } from 'lucide-react';
 import type { PreviewType } from '@uiw/react-md-editor';
 import type { TranslationDirection, TranslationDomain } from '../services/api';
 import { TRANSLATION_DIRECTION_OPTIONS, TRANSLATION_DOMAIN_OPTIONS } from '../services/api';
 import type { SourceFileMetadata } from '../types';
 
+type ToolbarActionState = 'disabled' | 'ready' | 'running';
+
 interface ToolbarProps {
   onSave: () => void;
   onCopy: () => void;
   onVerifyCitation: () => void;
-  canVerifyCitation: boolean;
-  isVerifyingCitation: boolean;
+  citationState: ToolbarActionState;
   onTranslate: () => void;
-  canTranslate: boolean;
-  isTranslating: boolean;
+  translationState: ToolbarActionState;
   translationDirection: TranslationDirection;
   onTranslationDirectionChange: (direction: TranslationDirection) => void;
   translationDomain: TranslationDomain | null;
@@ -36,6 +37,8 @@ interface ToolbarProps {
   onPreviewModeChange: (mode: PreviewType) => void;
   sourceFileMetadata: SourceFileMetadata | null;
   onOpenOriginal: () => void;
+  onExportWord: () => void;
+  wordExportState: ToolbarActionState;
 }
 
 const PREVIEW_MODES: { mode: PreviewType; icon: React.ElementType; label: string }[] = [
@@ -48,11 +51,9 @@ const Toolbar: React.FC<ToolbarProps> = ({
   onSave,
   onCopy,
   onVerifyCitation,
-  canVerifyCitation,
-  isVerifyingCitation,
+  citationState,
   onTranslate,
-  canTranslate,
-  isTranslating,
+  translationState,
   translationDirection,
   onTranslationDirectionChange,
   translationDomain,
@@ -62,9 +63,17 @@ const Toolbar: React.FC<ToolbarProps> = ({
   previewMode,
   onPreviewModeChange,
   sourceFileMetadata,
-  onOpenOriginal
+  onOpenOriginal,
+  onExportWord,
+  wordExportState
 }) => {
   const [copied, setCopied] = useState(false);
+  const canVerifyCitation = citationState !== 'disabled';
+  const isVerifyingCitation = citationState === 'running';
+  const canTranslate = translationState !== 'disabled';
+  const isTranslating = translationState === 'running';
+  const canExportWord = wordExportState !== 'disabled';
+  const isExportingWord = wordExportState === 'running';
 
   const handleCopy = () => {
     onCopy();
@@ -193,6 +202,18 @@ const Toolbar: React.FC<ToolbarProps> = ({
         >
           <Upload size={14} />
           <span>{sourceFileMetadata ? 'Mở tài liệu gốc' : 'Chọn tài liệu gốc'}</span>
+        </button>
+
+        <button
+          onClick={onExportWord}
+          disabled={!canExportWord || isExportingWord}
+          title={canExportWord
+            ? 'Tạo DOCX bằng ảnh lossless của toàn bộ trang PDF để giữ nguyên công thức, sơ đồ và hình ảnh'
+            : 'Mở hoặc chuyển đổi một file PDF gốc để dùng tính năng này'}
+          className="flex flex-none items-center space-x-2 whitespace-nowrap px-3 py-1.5 rounded-md text-[13px] font-medium transition-colors border bg-white hover:bg-gray-50 text-blue-700 border-blue-200 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {isExportingWord ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />}
+          <span>{isExportingWord ? 'Đang tạo Word...' : 'Xuất Word giống PDF'}</span>
         </button>
 
         <button 

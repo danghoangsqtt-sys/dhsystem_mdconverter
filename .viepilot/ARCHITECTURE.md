@@ -1,4 +1,4 @@
-# Kiến trúc hệ thống — v1.2
+# Kiến trúc hệ thống — v1.5
 
 ## 1. Tổng quan
 
@@ -19,12 +19,13 @@ flowchart LR
 
 ## 2. Ranh giới và invariant
 
-- Electron sinh token ngẫu nhiên cho mỗi process; renderer chỉ nhận token và hàm mở URL `http(s)`.
+- Electron sinh token ngẫu nhiên cho mỗi process; renderer chỉ nhận các bridge chuyên dụng: token, mở URL `http(s)`, khởi động Ollama đã biết và lưu DOCX đã kiểm tra — không có raw IPC/shell passthrough.
 - Mọi API nghiệp vụ cần token; `/api/session` chỉ bootstrap cho trusted localhost origin.
 - Tất cả identifier đi vào path phải parse thành UUID trước.
 - Upload được stream theo chunk, có allowlist extension và giới hạn mặc định 100 MiB.
 - Một worker duy nhất gọi Docling; registry/queue có capacity hữu hạn.
 - File tạm luôn được cleanup. Output/history chỉ tồn tại cùng nhau đối với job có lịch sử.
+- Xuất Word fidelity cao không tái dựng đối tượng PDF: mỗi trang được render lossless, neo tại `(0,0)` trong section cùng kích thước; vì vậy giữ hình thức nhưng không cung cấp text editable.
 - Markdown transform phải bảo toàn nội dung; không chứng minh được thì giữ input gốc.
 - Packaged mode không dùng user Python/cache, bắt buộc runtime và artifact cục bộ.
 
@@ -55,10 +56,11 @@ Docling chạy trong thread nên không thể hard-cancel an toàn. Với job đ
 | `backend/src/services/job_service.py` | queue, lifecycle, cancel, atomic output cleanup |
 | `backend/src/services/history_service.py` | locked atomic JSON persistence và eviction |
 | `backend/src/services/docling_service.py` | converter cache, execution lock, offline artifacts |
+| `backend/src/services/pdf_to_word_service.py` | render PDF tuần tự và tạo DOCX lossless theo từng section/trang |
 | `backend/src/services/markdown_cleaner.py` | table parser và content-preservation guard |
 | `frontend/src/services/api.ts` | authenticated create/poll/result/cancel client |
 | `frontend/src/App.tsx` | UI orchestration từ trạng thái job thật |
-| `frontend/electron/main.ts` | backend process, userData, offline env, navigation policy |
+| `frontend/electron/main.ts` | backend process, userData, offline env, navigation policy, hộp thoại lưu DOCX native |
 | `scripts/prepare-offline-bundle.ps1` | reproducible runtime/model preparation và smoke validation |
 
 ## 5. Storage

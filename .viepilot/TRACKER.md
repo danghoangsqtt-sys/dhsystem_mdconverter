@@ -1,9 +1,9 @@
 # Theo Dõi Tiến Độ (Tracker)
 
 ## Current State
-- **Current Phase:** Phase 11 — Responsive Window UX
-- **Status:** v1.4.1 built, installed, and smoke-tested locally
-- **Version:** 1.4.1
+- **Current Phase:** Phase 12 — Faithful PDF-to-Word Export
+- **Status:** v1.5.0 implemented, packaged, installed and smoke-tested locally
+- **Version:** 1.5.0
 - **Last Updated:** 2026-08-21
 
 ## Phase Progress
@@ -21,6 +21,7 @@
 | 9 | Ollama Citation Onboarding | ✅ Complete | Tests, Electron IPC smoke and real qwen2.5:3b inference pass |
 | 10 | Large PDF Reliability & Document Workflow UX | ✅ Complete | 87 backend tests + lint/build + 4 real Electron E2E pass |
 | 11 | Responsive Window UX | ✅ Complete | 820×700 geometry regression + lint/build + 5 Electron E2E pass |
+| 12 | Faithful PDF-to-Word Export | ✅ Complete | Pixel-identical page images + 94 backend tests + 6 Electron E2E pass |
 
 ## Phase 4 Task Detail
 | Task | Description | Status |
@@ -49,3 +50,5 @@
 - **2026-08-21:** NSIS 1.4.0 build/cài đặt local đạt; installer và executable đã cài đều trả version 1.4.0, smoke tiến trình phản hồi bình thường
 - **2026-08-21:** Hoàn tất Phase 11: toolbar tự wrap theo cụm, Sidebar không tràn ở chiều rộng hẹp và nút tài liệu gốc luôn hiện; lint/build + React Doctor + 5 Electron E2E đạt
 - **2026-08-21:** Đã tạo bộ cài offline v1.4.1, cài đè thành công (exit code 0), xác minh executable/app.asar cùng phiên bản và smoke-test bản cài đạt
+- **2026-08-21:** Hoàn tất Phase 12: xuất toàn bộ PDF sang Word bằng ảnh lossless toàn trang, giữ đúng khổ/hướng trang, lưu native qua hộp thoại Electron; ảnh nhúng khớp từng pixel với PDF mẫu, 94 backend tests + lint/build + 6 Electron E2E đạt
+- **2026-08-21:** NSIS 1.5.0 build/cài đặt local đạt; installer, executable và app.asar cùng phiên bản 1.5.0, ứng dụng đã cài khởi động và phản hồi bình thường

@@ -1,10 +1,10 @@
 {
   "name": "mark-tini",
   "private": true,
-  "version": "1.4.1",
+  "version": "1.5.0",
   "type": "module",
   "main": "dist-electron/main.cjs",
-  "description": "Mark Tini - Offline PDF to Markdown Converter",
+  "description": "Mark Tini - Offline document converter with faithful PDF-to-Word export",
   "author": "DHSystem",
   "scripts": {
     "dev": "vite",

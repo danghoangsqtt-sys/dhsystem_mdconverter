@@ -9,6 +9,10 @@ declare global {
       apiToken: string;
       openExternal: (url: string) => Promise<void>;
       ensureOllama: () => Promise<'running' | 'started' | 'not_installed' | 'start_failed'>;
+      saveWordFile: (
+        fileName: string,
+        bytes: Uint8Array,
+      ) => Promise<{ status: 'saved'; filePath: string } | { status: 'cancelled' }>;
     };
   }
 }
