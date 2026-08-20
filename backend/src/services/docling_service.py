@@ -147,20 +147,20 @@ def warm_up_models() -> None:
         startup_state["detail"] = f"Lỗi tải mô hình: {e}"
 
 
-def upscale_region_image(file_path: str, min_width: int = 800) -> str:
+def upscale_region_image(file_path: str, min_width: int = 600) -> str:
     """
     Upscale cropped region images (from PDF viewer extraction) to improve OCR
     accuracy. Small/sparse crops often fail Docling's layout classification
-    and EasyOCR confidence, so we upscale 2x–3x before conversion if the image
+    and EasyOCR confidence, so we upscale 2x–4x before conversion if the image
     is smaller than min_width pixels.
 
     Args:
         file_path: Path to the original region image (PNG)
-        min_width: Upscale if image width < this value (default 800)
+        min_width: Upscale if image width < this value (default 600)
 
     Returns:
         Path to upscaled image (original file if already large enough, or
-        a new temp file with 2x-3x scaling)
+        a new temp file with 2x-4x scaling)
     """
     try:
         img = Image.open(file_path)
@@ -171,11 +171,14 @@ def upscale_region_image(file_path: str, min_width: int = 800) -> str:
             logger.info(f"Region image already large ({width}x{height}), skipping upscale")
             return file_path
         
-        # Calculate upscale factor (2x–3x depending on how small)
-        if width < 300:
-            scale = 3
+        # Calculate upscale factor (2x–4x depending on how small)
+        # Small images need more aggressive upscaling to improve OCR
+        if width < 250:
+            scale = 4      # Very small: 4x
+        elif width < 350:
+            scale = 3.5    # Tiny: 3.5x
         elif width < 500:
-            scale = 2.5
+            scale = 3      # Small: 3x
         else:
             scale = 2
         
@@ -203,12 +206,19 @@ def convert_document_to_markdown(
     file_path: str,
     lang: str = DEFAULT_OCR_LANG,
     table_mode: str = DEFAULT_TABLE_MODE,
+    original_filename: str | None = None,
 ) -> str:
     """
     Converts a document (PDF, DOCX, etc.) to Markdown using docling.
     Retains formatting, layout, tables, math/physics/chemistry formulas (as
     LaTeX), and source code blocks according to docling's capabilities.
     Post-processes the output with markdown_cleaner for better readability.
+    
+    Args:
+        file_path: Path to the document file
+        lang: OCR language preset (vi_en, vi, en)
+        table_mode: Table recognition mode (accurate, fast)
+        original_filename: Original filename to embed in metadata for traceability
     """
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"File not found: {file_path}")
@@ -249,14 +259,15 @@ def convert_document_to_markdown(
             # layout/picture classification entirely and always recovers
             # whatever text OCR actually found.
             
-            # Collect all OCR text with less aggressive filtering — include
-            # text even if confidence is slightly lower, as region-extracted
-            # crops benefit from being more permissive (already upscaled above).
+            # Collect all OCR text with minimal filtering — upscaled images
+            # can handle lower confidence. Keep everything, even single chars,
+            # since region extraction is user-intent-driven (they selected it).
+            # Better to include 1 extra char than lose part of the answer.
             raw_markdown = "\n\n".join(
                 t.text.strip() for t in result.document.texts 
-                if t.text and len(t.text.strip()) >= 2  # Keep text ≥2 chars
+                if t.text and len(t.text.strip()) >= 1  # Keep any text ≥1 char
             )
-            logger.info(f"Extracted {len(result.document.texts)} text items from region image")
+            logger.info(f"Extracted {len(result.document.texts)} text items from region image, min filter: 1 char")
         else:
             raw_markdown = result.document.export_to_markdown()
         logger.info(f"Raw conversion complete: {resolved_processing_path}")
@@ -272,6 +283,12 @@ def convert_document_to_markdown(
                 logger.info(f"Cleaned up temp upscaled file: {processing_path}")
             except Exception as e:
                 logger.warning(f"Failed to clean up temp file {processing_path}: {e}")
+
+        # Add metadata header with original filename for traceability
+        # Frontend can use this to offer "Open Original" button
+        if original_filename:
+            metadata = f"<!-- Source file: {original_filename} -->\\n\\n"
+            cleaned_markdown = metadata + cleaned_markdown
 
         return cleaned_markdown
     except Exception as e:

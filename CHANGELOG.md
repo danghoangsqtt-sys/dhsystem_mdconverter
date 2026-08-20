@@ -3,6 +3,12 @@ Tất cả các thay đổi của dự án sẽ được cập nhật tại đâ
 
 ## [Unreleased]
 
+## [1.3.1] — 2026-08-20
+
+### Fixed
+- **Frontend:** Sửa lỗi không có nút "Mở file gốc" khi mở lại ứng dụng với file Markdown đã trích xuất — thêm nút trên toolbar hiển thị tên file PDF gốc (từ metadata `<!-- Source file: ... -->` nhúng trong Markdown) để người dùng chọn lại file PDF để trích xuất lại.
+- **Frontend/Backend:** Sửa lỗi chỉ trích xuất tối đa ~44 trang cho PDF lớn (100+ trang) — tăng timeout chuyển đổi từ 120 giây lên **10 phút** (600 giây) trong `api.ts` để xử lý PDF nhiều trang với OCR + nhận diện bảng chế độ `accurate`. Cùng tăng timeout polling job status/result từ 10s lên 30s.
+
 ## [1.3.0] — 2026-08-20
 
 ### Changed

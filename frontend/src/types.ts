@@ -84,3 +84,7 @@ export interface TranslationResult {
 export interface TranslationEntry extends TranslationResult {
   id: string;
 }
+
+export interface SourceFileMetadata {
+  originalFilename: string;
+}

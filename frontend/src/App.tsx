@@ -21,7 +21,8 @@ import {
 } from './services/api';
 import type { OcrLang, TableMode, HistoryEntry, ConversionJobState, TranslationDirection, TranslationDomain } from './services/api';
 import { loadAutosave, saveAutosave } from './services/autosaveDb';
-import type { ProcessingState, ToastMessage, ExtractionResult, CitationVerificationEntry, TranslationEntry } from './types';
+import { extractSourceFileMetadata } from './utils/markdownMetadata';
+import type { ProcessingState, ToastMessage, ExtractionResult, CitationVerificationEntry, TranslationEntry, SourceFileMetadata } from './types';
 import { AlertTriangle, X } from 'lucide-react';
 
 // Both pull in heavy libraries (CodeMirror, pdf.js) that don't need to block
@@ -181,6 +182,7 @@ const App: React.FC = () => {
   const [hasSelection, setHasSelection] = useState(false);
   const [ocrLang, setOcrLang] = useState<OcrLang>('vi_en');
   const [tableMode, setTableMode] = useState<TableMode>('accurate');
+  const [sourceFileMetadata, setSourceFileMetadata] = useState<SourceFileMetadata | null>(null);
 
   const addToast = useCallback((type: 'success' | 'error' | 'info', message: string) => {
     dispatch({ type: 'ADD_TOAST', payload: { id: Date.now(), type, message } });
@@ -410,6 +412,8 @@ const App: React.FC = () => {
 
       activeJobIdRef.current = null;
       activeUploadControllerRef.current = null;
+      const metadata = extractSourceFileMetadata(response.markdown);
+      setSourceFileMetadata(metadata);
       dispatch({ type: 'SET_CONTENT', payload: response.markdown });
       dispatch({
         type: 'SET_PROCESSING_STATE',
@@ -628,6 +632,8 @@ const App: React.FC = () => {
 
     try {
       const entry = await fetchHistoryItem(jobId);
+      const metadata = extractSourceFileMetadata(entry.markdown);
+      setSourceFileMetadata(metadata);
       dispatch({
         type: 'LOAD_SAVED_STATE',
         payload: {
@@ -665,6 +671,8 @@ const App: React.FC = () => {
 
     try {
       const text = await file.text();
+      const metadata = extractSourceFileMetadata(text);
+      setSourceFileMetadata(metadata);
       dispatch({
         type: 'LOAD_SAVED_STATE',
         payload: { content: text, fileName: file.name }
@@ -676,6 +684,15 @@ const App: React.FC = () => {
     }
   }, [addToast]);
 
+  const handleOpenOriginal = useCallback(() => {
+    // Trigger the markdown file input to let user re-upload the original PDF
+    // Since the original PDF was deleted after conversion, user needs to select it again
+    const mdInput = document.querySelector('input[type="file"][accept=".md,.markdown,.txt"]') as HTMLInputElement;
+    if (mdInput) {
+      mdInput.click();
+    }
+  }, []);
+
   const resetDocument = useCallback(() => {
     // Invalidate any in-flight conversion so its eventual response can't
     // clobber the blank document we're about to show.
@@ -684,6 +701,7 @@ const App: React.FC = () => {
     if (activeJobIdRef.current) void cancelConversionJob(activeJobIdRef.current).catch(() => undefined);
     activeJobIdRef.current = null;
     setSourceFile(null);
+    setSourceFileMetadata(null);
     setExtractionResults([]);
     setCitationResults([]);
     setTranslationResults([]);
@@ -783,6 +801,8 @@ const App: React.FC = () => {
           saveStatus={state.saveStatus}
           previewMode={previewMode}
           onPreviewModeChange={setPreviewMode}
+          sourceFileMetadata={sourceFileMetadata}
+          onOpenOriginal={handleOpenOriginal}
         />
 
         <div className="flex-1 overflow-hidden relative bg-neutral-100 p-4">

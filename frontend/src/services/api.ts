@@ -4,6 +4,8 @@ import type { CitationVerificationResult, TranslationResult } from '../types';
 const API_BASE_URL = 'http://127.0.0.1:8088/api';
 const API_TOKEN_HEADER = 'X-DocuMark-Token';
 const POLL_INTERVAL_MS = 750;
+// Increased timeout for large PDFs (100+ pages with OCR/tables can take 5-10 minutes)
+const CONVERSION_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 
 let browserTokenPromise: Promise<string> | null = null;
 
@@ -141,7 +143,7 @@ export const createConversionJob = async (
         ...(await authHeaders()),
         'Content-Type': 'multipart/form-data',
       },
-      timeout: 120000,
+      timeout: CONVERSION_TIMEOUT_MS,
       signal,
       onUploadProgress: event => {
         if (onUploadProgress && event.total) {
@@ -158,7 +160,7 @@ export const createConversionJob = async (
 export const fetchConversionJob = async (jobId: string): Promise<ConversionJobState> => {
   const response = await axios.get<ConversionJobState>(`${API_BASE_URL}/jobs/${jobId}`, {
     headers: await authHeaders(),
-    timeout: 10000,
+    timeout: 30000, // Increased for long-running conversions
   });
   return response.data;
 };
@@ -166,7 +168,7 @@ export const fetchConversionJob = async (jobId: string): Promise<ConversionJobSt
 export const fetchConversionResult = async (jobId: string): Promise<ConversionResponse> => {
   const response = await axios.get<ConversionResponse>(`${API_BASE_URL}/jobs/${jobId}/result`, {
     headers: await authHeaders(),
-    timeout: 10000,
+    timeout: 30000, // Increased for large results
   });
   return response.data;
 };

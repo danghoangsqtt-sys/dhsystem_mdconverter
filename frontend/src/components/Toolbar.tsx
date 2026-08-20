@@ -9,11 +9,13 @@ import {
   Columns2,
   Eye,
   ShieldCheck,
-  Languages
+  Languages,
+  Upload
 } from 'lucide-react';
 import type { PreviewType } from '@uiw/react-md-editor';
 import type { TranslationDirection, TranslationDomain } from '../services/api';
 import { TRANSLATION_DIRECTION_OPTIONS, TRANSLATION_DOMAIN_OPTIONS } from '../services/api';
+import type { SourceFileMetadata } from '../types';
 
 interface ToolbarProps {
   onSave: () => void;
@@ -32,6 +34,8 @@ interface ToolbarProps {
   saveStatus: 'saved' | 'saving';
   previewMode: PreviewType;
   onPreviewModeChange: (mode: PreviewType) => void;
+  sourceFileMetadata: SourceFileMetadata | null;
+  onOpenOriginal: () => void;
 }
 
 const PREVIEW_MODES: { mode: PreviewType; icon: React.ElementType; label: string }[] = [
@@ -56,7 +60,9 @@ const Toolbar: React.FC<ToolbarProps> = ({
   fileName,
   saveStatus,
   previewMode,
-  onPreviewModeChange
+  onPreviewModeChange,
+  sourceFileMetadata,
+  onOpenOriginal
 }) => {
   const [copied, setCopied] = useState(false);
 
@@ -171,6 +177,17 @@ const Toolbar: React.FC<ToolbarProps> = ({
           {copied ? <Check size={14} /> : <Copy size={14} />}
           <span>{copied ? 'Đã chép' : 'Sao chép'}</span>
         </button>
+
+        {sourceFileMetadata && (
+          <button
+            onClick={onOpenOriginal}
+            title={`Mở lại file gốc: ${sourceFileMetadata.originalFilename}`}
+            className="flex items-center space-x-2 px-3 py-1.5 rounded-md text-[13px] font-medium transition-colors border bg-white hover:bg-gray-50 text-gray-700 border-gray-200 shadow-sm"
+          >
+            <Upload size={14} />
+            <span>Mở file gốc ({sourceFileMetadata.originalFilename})</span>
+          </button>
+        )}
 
         <button 
           onClick={onSave}
