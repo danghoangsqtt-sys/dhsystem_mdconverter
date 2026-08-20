@@ -14,7 +14,30 @@
 
 ---
 
-## 📋 Tổng quan
+## � Tài liệu & Hướng dẫn
+
+Dự án Mark Tini có đầy đủ tài liệu cho cả người dùng cuối và nhà phát triển:
+
+### 👤 Cho người dùng cuối
+
+| Tài liệu | Nội dung | Link |
+|----------|---------|------|
+| 📖 **Hướng dẫn sử dụng v1.3.0** | Cách sử dụng từng tính năng, xử lý lỗi, FAQ | [📖 Mở](docs/huong-dan-su-dung-v1.3.0.md) |
+| 🎓 **Báo cáo kỹ thuật v1.3.0** | Chi tiết implementation, tính năng mới, fix bugs, test coverage | [📋 Xem](docs/bao-cao-ky-thuat-v1.3.0.md) |
+
+### 👨‍💻 Cho nhà phát triển
+
+| Tài liệu | Nội dung | Link |
+|----------|---------|------|
+| 🏗️ **Luồng hoạt động** | Sơ đồ data flow, queue, OCR, dịch, xác minh trích dẫn | [🔄 Xem](docs/luong-hoat-dong-du-an.md) |
+| 🏛️ **Kiến trúc hệ thống** | Thiết kế hệ thống, invariant bảo mật, offline strategy | [🏛️ Xem](.viepilot/ARCHITECTURE.md) |
+| 🔐 **Spec v1.2** | Bảo mật, reliability, offline packaging requirements | [🔐 Xem](.viepilot/phases/phase-8-reliability-security-offline/SPEC.md) |
+| 📝 **Changelog** | Lịch sử phiên bản, fix & feature mỗi release | [📜 Xem](CHANGELOG.md) |
+| 🤝 **Hướng dẫn đóng góp** | Quy trình fork, commit, pull request | [🤝 Xem](CONTRIBUTING.md) |
+
+---
+
+## �📋 Tổng quan
 
 **Mark Tini** là công cụ Windows chuyên biệt chuyển PDF, DOCX, PPTX, HTML và ảnh sang Markdown sạch, dễ chỉnh sửa. Toàn bộ xử lý diễn ra **trên máy của bạn** — không cần đẩy file lên đám mây, không cần tài khoản, không cần internet cho phần lớn tính năng.
 
@@ -215,19 +238,7 @@ Chi tiết kiến trúc: [ARCHITECTURE.md](.viepilot/ARCHITECTURE.md) | [SPEC v1
 
 ---
 
-## 📚 Tài liệu
-
-| Tài liệu | Nội dung |
-|----------|---------|
-| [Báo cáo kỹ thuật v1.3.0](docs/bao-cao-ky-thuat-v1.3.0.md) | Chi tiết implementation, tính năng mới, fix bugs, test coverage |
-| [Hướng dẫn sử dụng v1.3.0](docs/huong-dan-su-dung-v1.3.0.md) | Các bước sử dụng từng tính năng, xử lý lỗi |
-| [Luồng hoạt động dự án](docs/luong-hoat-dong-du-an.md) | Sơ đồ data flow, queue, OCR, dịch, xác minh trích dẫn |
-| [ARCHITECTURE.md](.viepilot/ARCHITECTURE.md) | Thiết kế hệ thống, invariant bảo mật, offline strategy |
-| [CHANGELOG.md](CHANGELOG.md) | Lịch sử phiên bản, fix & feature mỗi release |
-
----
-
-## 🔐 Bảo mật & Dữ liệu
+##  Bảo mật & Dữ liệu
 
 - ✅ **100% cục bộ**: Toàn bộ conversion xảy ra trên máy, không đẩy lên cloud
 - ✅ **Không tài khoản**: Không cần đăng nhập hoặc tạo tài khoản
