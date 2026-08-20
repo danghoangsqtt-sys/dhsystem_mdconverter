@@ -1,29 +1,77 @@
 <div align="center">
-  <img src="docs/logo.svg" alt="Mark Tini Logo" width="128" height="128" />
-  <h1>Mark Tini Editor</h1>
-  <p><strong>Ứng dụng Windows chuyển tài liệu sang Markdown, xử lý cục bộ bằng Docling</strong></p>
-  <p>
-    <img alt="Version" src="https://img.shields.io/badge/version-1.3.0-58A6FF?style=flat-square"/>
-    <img alt="License" src="https://img.shields.io/badge/license-MIT-3FB950?style=flat-square"/>
-    <img alt="Platform" src="https://img.shields.io/badge/platform-Windows-0078D4?style=flat-square&logo=windows"/>
-  </p>
+  <img src="docs/logo.svg" alt="Mark Tini Logo" width="120" height="120" style="margin: 20px 0;" />
+  
+  # Mark Tini Editor
+  
+  **🚀 Chuyển đổi tài liệu sang Markdown — Hoàn toàn ngoại tuyến, chạy cục bộ trên Windows**
+
+  [![Version](https://img.shields.io/badge/version-1.3.0-58A6FF?style=for-the-badge)](CHANGELOG.md)
+  [![License](https://img.shields.io/badge/license-MIT-3FB950?style=for-the-badge)](LICENSE)
+  [![Platform](https://img.shields.io/badge/platform-Windows-0078D4?style=for-the-badge&logo=windows&logoColor=white)](README.md)
+  [![Made with](https://img.shields.io/badge/made%20with-Electron%20%7C%20React-black?style=for-the-badge&logo=electron&logoColor=white)](frontend/package.json)
+
 </div>
 
-## Tổng quan
+---
 
-Mark Tini chuyển PDF, DOCX, PPTX, HTML và ảnh sang Markdown. Ứng dụng có OCR Việt/Anh, hai chế độ nhận dạng bảng, trích xuất vùng PDF, lịch sử kết quả và trình soạn thảo Markdown.
+## 📋 Tổng quan
 
-Từ v1.2, luồng chuyển đổi dùng một hàng đợi backend có trạng thái thật. Mỗi file được kiểm tra loại/kích thước, xử lý tuần tự để tránh tranh chấp RAM/CPU, ghi kết quả nguyên tử và có thể hủy. Bản Electron production dùng API token theo phiên và lưu dữ liệu tại thư mục `userData` của ứng dụng.
+**Mark Tini** là công cụ Windows chuyên biệt chuyển PDF, DOCX, PPTX, HTML và ảnh sang Markdown sạch, dễ chỉnh sửa. Toàn bộ xử lý diễn ra **trên máy của bạn** — không cần đẩy file lên đám mây, không cần tài khoản, không cần internet cho phần lớn tính năng.
 
-## Tính năng chính
+Từ phiên bản **v1.2.0** trở lên, Mark Tini sử dụng:
+- **Hàng đợi backend với trạng thái thật**: Job được xử lý tuần tự, có thể hủy an toàn, không để lại dữ liệu rác
+- **Docling 2.101.0 + EasyOCR 1.7.2**: OCR tiếng Việt/Anh chính xác, nhận dạng bảng thông minh
+- **Runtime Python + model bundle**: Đóng gói sẵn, chạy offline, không cần cài đặt thêm
 
-- Chuyển đổi `.pdf`, `.docx`, `.pptx`, `.html`, `.htm` và các ảnh phổ biến.
-- OCR `vi + en`, chỉ `vi`, hoặc chỉ `en`.
-- TableFormer `accurate`/`fast`; cleaner giữ nguyên bảng nếu không chứng minh được transform bảo toàn nội dung.
-- Trạng thái job thật: `queued → converting → finalizing → complete`.
-- Hủy ngay job đang chờ; job ML đang chạy được đánh dấu hủy và kết quả bị loại bỏ an toàn.
-- Lịch sử giới hạn, tự xóa output bị loại khỏi lịch sử; OCR vùng không tạo file mồ côi.
-- Runtime Python và model Docling/EasyOCR được đóng gói để conversion production chạy offline.
+## ⭐ Tính năng nổi bật
+
+| Tính năng | Mô tả |
+|-----------|--------|
+| 📄 **Chuyển đổi đa định dạng** | PDF, DOCX, PPTX, HTML, ảnh (PNG, JPEG, TIFF, BMP) |
+| 🗣️ **OCR Việt/Anh** | Lựa chọn ngôn ngữ: `vi+en`, `vi`, hoặc `en` tùy theo tài liệu |
+| 📊 **Nhận dạng bảng thông minh** | Hai chế độ: `Accurate` (chính xác) hoặc `Fast` (nhanh) |
+| ✂️ **Trích xuất vùng PDF** | Vẽ khung chọn để OCR riêng một vùng, không phải cả trang |
+| 🔄 **Dịch đoạn Anh ↔ Việt** | Dịch offline bằng model NMT cục bộ, hỗ trợ thuật ngữ chuyên ngành |
+| 🔍 **Xác minh trích dẫn** | Kiểm tra câu trích dẫn qua OpenAlex API (cần internet) |
+| 📝 **Soạn thảo tích hợp** | Editor Markdown WYSIWYG, lưu tự động vào IndexedDB |
+| 📋 **Lịch sử chuyển đổi** | Giữ lại kết quả cũ, dễ dàng truy xuất hoặc xóa |
+| 🛡️ **Bảo mật & Riêng tư** | Chạy 100% cục bộ, token API per-session, giới hạn upload 100 MB |
+| 🔌 **Offline-first** | Model Docling/EasyOCR/dịch được đóng gói, không cần mạng cho conversion |
+
+---
+
+## 🖼️ Giao diện ứng dụng
+
+### Các thành phần chính:
+
+1. **Sidebar trái** (thu gọn/mở rộng được)
+   - Nút chọn tài liệu & chuyển đổi
+   - Tuỳ chọn OCR language + table mode
+   - Danh sách lịch sử chuyển đổi
+
+2. **Khung xem PDF**
+   - Hiển thị file PDF đang xử lý hoặc công việc trước
+   - Vẽ khung để trích xuất vùng (Region OCR)
+
+3. **Panel soạn thảo Markdown**
+   - Editor WYSIWYG, có thể chỉnh sửa trực tiếp
+   - Lưu tự động mỗi ~1 giây
+   - Copy/lưu file nhanh chóng
+
+4. **Toolbar công cụ**
+   - Nút dịch đoạn (chọn chiều dịch + lĩnh vực)
+   - Nút xác minh trích dẫn
+   - Nút tạo/mở/lưu tài liệu
+
+5. **Panel kết quả phụ**
+   - Hiển thị kết quả dịch, xác minh trích dẫn, hoặc trích xuất vùng
+   - Có thể chỉnh sửa, tìm trên web, hoặc chèn vào editor
+
+> 📸 **Tip:** Để capture screenshot ứng dụng, mở app đã build → menu Capture từ thanh công cụ hoặc sử dụng `Win + Shift + S` trên Windows 11.
+
+---
+
+## 🚀 Cài đặt và sử dụng
 
 ## Kiến trúc
 
@@ -53,69 +101,268 @@ Phiên bản hoàn thiện hiện tại: 1.3.0.
 
 v1.3.0 là phiên bản hiện tại và đã được đánh dấu là release hoàn thiện với các cải tiến chính: sửa lỗi OCR vùng PDF, đơn giản hóa giao diện dịch, sidebar thu gọn/kéo giãn, lưu tự động bằng IndexedDB, offline model bundle và kiểm soát queue backend. Dự án đang ở trạng thái ổn định cho việc phát hành và dùng nội bộ/đẩy GitHub.
 
-## Chạy development
+## 🚀 Cài đặt và sử dụng
 
-Yêu cầu Node.js hiện đại và Python tương thích với dependency đã khóa.
+### Cài đặt (Người dùng cuối)
+
+1. **Download installer**: Tải file `Mark Tini Setup 1.3.0.exe` từ [Release](../../releases/latest)
+2. **Chạy installer**: Double-click file `.exe`, làm theo hướng dẫn
+3. **Khởi chạy**: Mở ứng dụng từ Desktop hoặc Start Menu
+4. **Lần đầu**: Chờ 10-60 giây để nạp model AI (tuỳ thuộc cấu hình máy)
+
+> 💡 Không cần cài Python, Node.js, hoặc bất kỳ dependency nào — mọi thứ đã được đóng gói sẵn
+
+### Hướng dẫn sử dụng
+
+Xem [**📖 Hướng dẫn sử dụng đầy đủ v1.3.0**](docs/huong-dan-su-dung-v1.3.0.md) để biết chi tiết.
+
+**Quick start** — 5 bước cơ bản:
+
+1. Mở ứng dụng
+2. Ở Sidebar trái, chọn **"Chọn PDF & Chuyển đổi"**
+3. Chọn file (PDF/DOCX/PPTX/HTML/ảnh)
+4. Chọn ngôn ngữ OCR và chế độ nhận dạng bảng
+5. Chờ xong, chỉnh sửa Markdown trong editor, rồi lưu/copy kết quả
+
+### Development (Nhà phát triển)
+
+Yêu cầu Node.js 18+ và Python tương thích với dependency.
 
 ```powershell
+# Clone repo
+git clone https://github.com/danghoangsqtt-sys/dhsystem_mdconverter.git
+cd dhsystem_mdconverter
+
+# Tạo virtual environment
 python -m venv docling-env
 docling-env\Scripts\python.exe -m pip install -r backend\requirements.txt
-Set-Location frontend
+
+# Cài frontend dependency
+cd frontend
 npm install
+
+# Chạy dev mode
 npm run dev:electron
 ```
 
-Sau khi đã cài dependency, có thể chạy `start.bat` từ thư mục gốc. Script sẽ fail-fast nếu thiếu Python hoặc build frontend thất bại.
-
-## Build bản Windows offline
+Hoặc sử dụng script nhanh:
 
 ```powershell
-Set-Location frontend
+.\start.bat   # Khởi chạy dev (nếu đã cài dependency)
+```
+
+### Build bản Windows offline (Cho nhà phát triển)
+
+```powershell
+cd frontend
 npm run build:electron
 ```
 
-Quy trình build:
+Quy trình build tự động:
+1. Tạo runtime Python embeddable nếu chưa có
+2. Tải model Docling/EasyOCR/translation vào `offline_models/`
+3. Validate dependency lock (`requirements.lock.txt`)
+4. Build NSIS installer → `frontend/release/Mark Tini Setup 1.3.0.exe`
 
-1. Tạo/kiểm tra `python_runtime` độc lập (Python embeddable 3.14.0).
-2. Cài các dependency Python đã pin bằng `-s`, không dùng user site-packages.
-3. Tải `layout`, `tableformer`, `easyocr` vào `offline_models`.
-4. Fail build nếu thiếu runtime, EasyOCR hoặc artifact.
-5. Đóng gói runtime, model và backend vào NSIS installer trong `frontend/release/`.
+---
 
-Việc chuẩn bị model cần mạng một lần trên máy build. Đường chạy production đặt `HF_HUB_OFFLINE=1`, `TRANSFORMERS_OFFLINE=1`, tắt remote services và dùng artifact path cục bộ.
+## 🏗️ Kiến trúc hệ thống
 
-Kiểm tra bundle mà không tải/cài lại:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\prepare-offline-bundle.ps1 -ValidateOnly
-powershell -ExecutionPolicy Bypass -File scripts\prepare-offline-bundle.ps1 -ValidateOnly -SmokeDocument .\sample.pdf
+```
+┌─────────────────────────────────────────────────────────────┐
+│                   MARK TINI ARCHITECTURE                    │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  ┌──────────────────────┐         ┌──────────────────┐     │
+│  │   Electron/React UI  │         │  FastAPI Backend │     │
+│  │  ─────────────────   │──HTTP──▶│  ─────────────── │     │
+│  │ • Editor Markdown    │ token   │ • Job Queue      │     │
+│  │ • PDF Viewer         │◀────────│ • Docling        │     │
+│  │ • Toolbar & Sidebar  │         │ • Storage        │     │
+│  │ • History Panel      │         │ • Logging        │     │
+│  │ • Translation Panel  │         └──────────────────┘     │
+│  │ • Citation Verify    │                   │              │
+│  └──────────────────────┘                   │              │
+│           │                         ┌───────▼────────┐     │
+│           │                         │ Offline Models │     │
+│           │                         │ ────────────── │     │
+│           │                         │ • Docling      │     │
+│           │                         │ • EasyOCR      │     │
+│           │                         │ • Translation  │     │
+│           │                         │ • Code-Formula │     │
+│           │                         └────────────────┘     │
+│           ▼                                                 │
+│  ┌──────────────────────┐                                  │
+│  │   Data Storage       │                                  │
+│  │ ──────────────────── │                                  │
+│  │ • IndexedDB (UI)     │                                  │
+│  │ • data/outputs/      │                                  │
+│  │ • data/logs/         │                                  │
+│  │ • history.json       │                                  │
+│  └──────────────────────┘                                  │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-## Kiểm thử
+**Stack công nghệ:**
+- **Frontend**: React 19, TypeScript, Vite, Tailwind CSS, MDEditor
+- **Desktop**: Electron 42, IPC preload bridge, context isolation
+- **Backend**: FastAPI, Docling 2.101.0, EasyOCR 1.7.2, Python 3.14
+- **Storage**: IndexedDB (frontend), atomic file I/O (backend)
+- **Security**: API token per-session, trusted-origin bootstrap, content validation
+
+Chi tiết kiến trúc: [ARCHITECTURE.md](.viepilot/ARCHITECTURE.md) | [SPEC v1.2](.viepilot/phases/phase-8-reliability-security-offline/SPEC.md)
+
+---
+
+## 📚 Tài liệu
+
+| Tài liệu | Nội dung |
+|----------|---------|
+| [Báo cáo kỹ thuật v1.3.0](docs/bao-cao-ky-thuat-v1.3.0.md) | Chi tiết implementation, tính năng mới, fix bugs, test coverage |
+| [Hướng dẫn sử dụng v1.3.0](docs/huong-dan-su-dung-v1.3.0.md) | Các bước sử dụng từng tính năng, xử lý lỗi |
+| [Luồng hoạt động dự án](docs/luong-hoat-dong-du-an.md) | Sơ đồ data flow, queue, OCR, dịch, xác minh trích dẫn |
+| [ARCHITECTURE.md](.viepilot/ARCHITECTURE.md) | Thiết kế hệ thống, invariant bảo mật, offline strategy |
+| [CHANGELOG.md](CHANGELOG.md) | Lịch sử phiên bản, fix & feature mỗi release |
+
+---
+
+## 🔐 Bảo mật & Dữ liệu
+
+- ✅ **100% cục bộ**: Toàn bộ conversion xảy ra trên máy, không đẩy lên cloud
+- ✅ **Không tài khoản**: Không cần đăng nhập hoặc tạo tài khoản
+- ✅ **Token per-session**: API token được tạo mới khi ứng dụng khởi động, hết hạn khi đóng
+- ✅ **Path traversal protection**: UUID validation, sandbox upload directory
+- ✅ **Content validation**: Magic byte checking (PDF/image), OOXML member validation (DOCX/PPTX)
+- ✅ **Atomic storage**: File output được ghi nguyên tử, không để lại state trung gian
+- ✅ **Cleanup tự động**: Output bị loại bỏ khỏi lịch sử, upload rác, mồ côi đều được xóa
+- ✅ **Offline-first**: Model ML đóng gói, không cần internet cho conversion, dịch, OCR
+
+> 🔗 Chi tiết bảo mật: [SPEC v1.2 - Security](.viepilot/phases/phase-8-reliability-security-offline/SPEC.md#p0-release-blocker)
+
+---
+
+## 🧪 Kiểm thử
+
+### Unit tests
 
 ```powershell
 docling-env\Scripts\python.exe -m unittest discover -s backend\tests -v
-docling-env\Scripts\python.exe -m compileall -q backend
-Set-Location frontend
+```
+
+**Coverage:**
+- API token validation, path traversal
+- Job queue, cancel semantics, capacity limits
+- Storage atomicity, cleanup orphaned outputs/uploads
+- Markdown table correctness (regressions)
+
+### Lint & Build
+
+```powershell
+cd frontend
 npm run lint
 npm run build
 npm audit --omit=dev
 ```
 
-Bộ test bao phủ API token/origin, path traversal, giới hạn upload, queue/cancel/capacity, cleanup history/output và các regression làm mất nội dung bảng.
+### End-to-End tests (Playwright)
 
-## Bảo mật và dữ liệu
+```powershell
+cd frontend
+npm run test:e2e
+```
 
-- Mọi endpoint nghiệp vụ `/api/*` cần token phiên; bootstrap browser chỉ chấp nhận origin localhost tin cậy.
-- Job/history ID phải là UUID; upload mặc định tối đa 100 MiB và chỉ nhận extension được hỗ trợ.
-- File upload tạm được xóa sau complete/error/cancel.
-- Electron chỉ mở URL `http(s)` ra trình duyệt; renderer không có generic IPC hay Node integration.
-- `python_runtime/`, `offline_models/` và runtime data bị gitignore. Chạy `scripts/check-repository-hygiene.ps1` để phát hiện dữ liệu runtime đã bị Git theo dõi.
+Kiểm tra:
+- Shell chính khởi chạy, không crash
+- Golden path: tải PDF thật → convert thật → xác minh output
+- Sidebar collapse/expand, width persistence
+- IndexedDB autosave recovery
 
-Lưu ý: lịch sử Git đã được rewrite để gỡ dữ liệu chuyển đổi cũ từng bị theo dõi trước đây (bản backup trước khi rewrite nằm ở branch `backup/pre-history-purge-20260818`). Script hygiene ở trên chỉ báo lỗi, không tự xóa hay rewrite lịch sử — dùng để phát hiện sớm nếu dữ liệu runtime vô tình bị theo dõi lại.
+---
 
-## Trạng thái phát hành
+## 📊 Trạng thái phát hành
 
-v1.3 đã vượt qua unit tests, lint/build, dependency audit và offline PDF smoke test tại workspace phát triển; installer đã được build lại và cài đặt/khởi chạy thành công trên máy phát triển sau các thay đổi mới nhất. Clean-machine installer test (máy Windows sạch, chưa từng cài Python/Node/IDE dev) vẫn là release gate thủ công trước khi công bố installer.
+### Phiên bản hiện tại: **v1.3.0** (2026-08-20)
 
-Xem lịch sử thay đổi tại [CHANGELOG.md](CHANGELOG.md).
+**Cải tiến chính:**
+- ✅ Sửa lỗi trích xuất vùng PDF trả về placeholder
+- ✅ Đơn giản hoá UI panel dịch
+- ✅ Thêm sidebar thu gọn/kéo giãn
+- ✅ Chuyển autosave sang IndexedDB
+- ✅ Model code-formula enrichment
+- ✅ Backend log rotation + correlation ID
+- ✅ E2E test infrastructure (Playwright)
+
+**Trạng thái:**
+- ✅ Implementation hoàn tất
+- ✅ Unit/integration tests pass
+- ✅ Lint, build, security audit pass
+- ⏳ Clean-machine installer test (manual gate)
+
+> Xem [CHANGELOG.md](CHANGELOG.md) để xem lịch sử phiên bản chi tiết.
+
+---
+
+## 🐛 Báo cáo lỗi & Yêu cầu tính năng
+
+Gặp sự cố? Hãy:
+
+1. Kiểm tra [Troubleshooting](docs/huong-dan-su-dung-v1.3.0.md#-xử-lý-sự-cố-thường-gặp) trong hướng dẫn
+2. Xem file log tại `%APPDATA%\Mark Tini\data\logs\backend.log`
+3. Mở [Issue trên GitHub](../../issues) với:
+   - Phiên bản ứng dụng (xem trong About)
+   - Bước tái tạo lỗi
+   - Ảnh chụp hoặc log lỗi
+   - Phiên bản Windows của máy
+
+---
+
+## 🤝 Đóng góp
+
+Mọi đóng góp đều được chào đón! Vui lòng:
+
+1. **Fork** repo
+2. **Tạo branch** cho tính năng mới hoặc fix bug: `git checkout -b feature/your-feature`
+3. **Commit** thay đổi: `git commit -m "Add your feature"`
+4. **Push** lên branch của bạn: `git push origin feature/your-feature`
+5. **Mở Pull Request** với mô tả chi tiết
+
+Chi tiết xem [CONTRIBUTING.md](CONTRIBUTING.md).
+
+---
+
+## 📜 License
+
+Mark Tini được phát hành dưới license **MIT**. Xem [LICENSE](LICENSE) để biết chi tiết.
+
+---
+
+## 👥 Về dự án
+
+**Mark Tini** là một sản phẩm của [DHSystem](https://dhsystem.example.com), được phát triển với mục đích cung cấp công cụ chuyển đổi tài liệu mạnh mẽ, bảo mật và riêng tư cho người dùng Windows.
+
+**Tác giả:** DHSystem (@danghoangsqtt-sys)  
+**Năm**: 2026
+
+---
+
+## 🔗 Liên kết nhanh
+
+- 📖 [Hướng dẫn sử dụng](docs/huong-dan-su-dung-v1.3.0.md)
+- 🏗️ [Kiến trúc hệ thống](docs/luong-hoat-dong-du-an.md)
+- 🔐 [Bảo mật & SPEC](.viepilot/phases/phase-8-reliability-security-offline/SPEC.md)
+- 📝 [Changelog](CHANGELOG.md)
+- 🐛 [Issues](../../issues)
+- 📮 [Discussions](../../discussions)
+
+---
+
+<div align="center">
+
+**Được xây dựng với ❤️ bởi DHSystem**
+
+![GitHub stars](https://img.shields.io/github/stars/danghoangsqtt-sys/dhsystem_mdconverter?style=social)
+![GitHub forks](https://img.shields.io/github/forks/danghoangsqtt-sys/dhsystem_mdconverter?style=social)
+
+</div>
+
