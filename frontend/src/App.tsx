@@ -582,6 +582,7 @@ const App: React.FC = () => {
     }
     setIsVerifyingCitation(true);
     try {
+      await window.documark?.ensureOllama?.();
       const result = await verifyCitation(selectedText);
       setCitationResults(prev => [...prev, { id: `${Date.now()}`, ...result }]);
     } catch (err: unknown) {

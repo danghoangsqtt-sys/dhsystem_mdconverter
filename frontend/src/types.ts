@@ -60,6 +60,8 @@ export interface CitationVerificationResult {
   match: CitationMatch | null;
   llm_assessment: string | null;
   llm_available: boolean;
+  llm_status: 'available' | 'unreachable' | 'model_missing' | 'not_configured' | 'error';
+  llm_model: string | null;
 }
 
 // A CitationVerificationResult with a client-generated id, for the review

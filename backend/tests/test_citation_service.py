@@ -103,7 +103,8 @@ class AssessWithOllamaTests(unittest.IsolatedAsyncioTestCase):
                 model="qwen2.5:7b",
             )
 
-        self.assertEqual(assessment, "Co ve phu hop, nhung chua chac chan.")
+        self.assertEqual(assessment.text, "Co ve phu hop, nhung chua chac chan.")
+        self.assertEqual(assessment.status, "available")
 
     async def test_unreachable_ollama_returns_none_instead_of_raising(self) -> None:
         def handler(request: httpx.Request) -> httpx.Response:
@@ -117,7 +118,23 @@ class AssessWithOllamaTests(unittest.IsolatedAsyncioTestCase):
                 model="qwen2.5:7b",
             )
 
-        self.assertIsNone(assessment)
+        self.assertIsNone(assessment.text)
+        self.assertEqual(assessment.status, "unreachable")
+
+    async def test_missing_model_returns_actionable_status(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(404, json={"error": "model not found"})
+
+        with _patch_client(handler):
+            assessment = await citation_service.assess_with_ollama(
+                "some claim",
+                None,
+                base_url="http://127.0.0.1:11434",
+                model="qwen2.5:3b",
+            )
+
+        self.assertIsNone(assessment.text)
+        self.assertEqual(assessment.status, "model_missing")
 
     async def test_malformed_response_returns_none(self) -> None:
         def handler(request: httpx.Request) -> httpx.Response:
@@ -131,7 +148,8 @@ class AssessWithOllamaTests(unittest.IsolatedAsyncioTestCase):
                 model="qwen2.5:7b",
             )
 
-        self.assertIsNone(assessment)
+        self.assertIsNone(assessment.text)
+        self.assertEqual(assessment.status, "error")
 
 
 if __name__ == "__main__":

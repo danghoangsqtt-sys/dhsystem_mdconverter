@@ -1,5 +1,5 @@
-import React from 'react';
-import { X, BadgeCheck, BadgeAlert, BadgeX, Sparkles, AlertTriangle } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, BadgeCheck, BadgeAlert, BadgeX, Sparkles, AlertTriangle, Download, Copy, Check } from 'lucide-react';
 import type { CitationVerificationEntry, CitationMatch } from '../types';
 
 interface CitationVerificationPanelProps {
@@ -21,7 +21,24 @@ const matchBadge = (match: CitationMatch | null): { label: string; className: st
 };
 
 export const CitationVerificationPanel: React.FC<CitationVerificationPanelProps> = ({ results, onDismiss }) => {
+  const [copiedCommand, setCopiedCommand] = useState<string | null>(null);
   if (results.length === 0) return null;
+
+  const openOllamaInstaller = () => {
+    const url = 'https://ollama.com/download/windows';
+    if (window.documark?.openExternal) {
+      void window.documark.openExternal(url);
+    } else {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
+  };
+
+  const copyPullCommand = async (model: string) => {
+    const command = `ollama pull ${model}`;
+    await navigator.clipboard.writeText(command);
+    setCopiedCommand(command);
+    window.setTimeout(() => setCopiedCommand(current => current === command ? null : current), 2000);
+  };
 
   return (
     <div className="bg-white border-t border-gray-200 shadow-sm max-h-64 overflow-y-auto flex-shrink-0">
@@ -48,6 +65,9 @@ export const CitationVerificationPanel: React.FC<CitationVerificationPanelProps>
               </div>
 
               <div className="rounded p-2 bg-gray-50 border border-gray-100">
+                <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                  Tra cứu nguồn online · OpenAlex
+                </div>
                 <div className={`inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded ${badge.className}`}>
                   <BadgeIcon size={12} /> {badge.label}
                 </div>
@@ -69,7 +89,7 @@ export const CitationVerificationPanel: React.FC<CitationVerificationPanelProps>
 
               <div className="rounded p-2 bg-purple-50/60 border border-dashed border-purple-200">
                 <div className="flex items-center gap-1 text-[11px] font-medium text-purple-700">
-                  <Sparkles size={12} /> Đánh giá nội dung (tham khảo)
+                  <Sparkles size={12} /> Đánh giá AI cục bộ bằng Ollama (tùy chọn)
                 </div>
                 {result.llm_available && result.llm_assessment ? (
                   <>
@@ -79,9 +99,37 @@ export const CitationVerificationPanel: React.FC<CitationVerificationPanelProps>
                     </p>
                   </>
                 ) : (
-                  <p className="mt-1 text-xs text-gray-500">
-                    Cần Ollama đang chạy cục bộ để dùng gợi ý nội dung.
-                  </p>
+                  <div className="mt-1.5 space-y-2 text-xs text-gray-600">
+                    <p>
+                      {result.llm_status === 'model_missing'
+                        ? `Ollama đang chạy nhưng chưa có model ${result.llm_model ?? 'qwen2.5:3b'}.`
+                        : 'Ollama chưa sẵn sàng. Kết quả OpenAlex phía trên vẫn hoạt động độc lập qua internet.'}
+                    </p>
+                    <ol className="list-decimal pl-4 space-y-0.5 text-[11px] text-gray-500">
+                      <li>Cài Ollama cho Windows nếu máy chưa có.</li>
+                      <li>Chạy lệnh <code className="px-1 py-0.5 rounded bg-white border border-purple-100">ollama pull {result.llm_model ?? 'qwen2.5:3b'}</code>.</li>
+                      <li>Xác minh lại; Mark Tini sẽ tự khởi động Ollama đã cài.</li>
+                    </ol>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={openOllamaInstaller}
+                        className="inline-flex items-center gap-1 rounded border border-purple-200 bg-white px-2 py-1 text-[11px] font-medium text-purple-700 hover:bg-purple-50"
+                      >
+                        <Download size={11} /> Cài Ollama
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void copyPullCommand(result.llm_model ?? 'qwen2.5:3b')}
+                        className="inline-flex items-center gap-1 rounded border border-purple-200 bg-white px-2 py-1 text-[11px] font-medium text-purple-700 hover:bg-purple-50"
+                      >
+                        {copiedCommand === `ollama pull ${result.llm_model ?? 'qwen2.5:3b'}`
+                          ? <Check size={11} />
+                          : <Copy size={11} />}
+                        {copiedCommand === `ollama pull ${result.llm_model ?? 'qwen2.5:3b'}` ? 'Đã sao chép' : 'Sao chép lệnh tải model'}
+                      </button>
+                    </div>
+                  </div>
                 )}
               </div>
             </div>

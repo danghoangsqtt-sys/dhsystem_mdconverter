@@ -86,6 +86,7 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL
 
 let win: BrowserWindow | null;
 let pythonProcess: ChildProcess | null = null;
+let ollamaProcess: ChildProcess | null = null;
 
 // ─── Backend Crash-Restart State ──────────────────────────────
 // If the backend dies unexpectedly (crash, killed externally, etc.) we
@@ -103,6 +104,69 @@ let restartResetTimer: NodeJS.Timeout | null = null;
 // Safe logging helper — never throws even if stdout/stderr is broken
 function safeLog(...args: unknown[]) {
   try { console.log(...args); } catch { /* swallow */ }
+}
+
+type OllamaStartupStatus = 'running' | 'started' | 'not_installed' | 'start_failed';
+
+async function isOllamaRunning(): Promise<boolean> {
+  try {
+    const response = await fetch('http://127.0.0.1:11434/api/tags', {
+      signal: AbortSignal.timeout(1500),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+function findOllamaExecutable(): string | null {
+  const candidates = [
+    process.env.OLLAMA_EXE,
+    process.env.LOCALAPPDATA
+      ? path.join(process.env.LOCALAPPDATA, 'Programs', 'Ollama', 'ollama.exe')
+      : undefined,
+    process.env.ProgramFiles
+      ? path.join(process.env.ProgramFiles, 'Ollama', 'ollama.exe')
+      : undefined,
+  ];
+  return candidates.find((candidate): candidate is string =>
+    typeof candidate === 'string'
+      && candidate.toLowerCase().endsWith('ollama.exe')
+      && fs.existsSync(candidate)
+  ) ?? null;
+}
+
+async function ensureOllama(): Promise<OllamaStartupStatus> {
+  if (await isOllamaRunning()) return 'running';
+
+  const ollamaExe = findOllamaExecutable();
+  if (!ollamaExe) return 'not_installed';
+
+  if (!ollamaProcess || ollamaProcess.exitCode !== null) {
+    try {
+      ollamaProcess = spawn(ollamaExe, ['serve'], {
+        detached: false,
+        stdio: 'ignore',
+        windowsHide: true,
+      });
+      ollamaProcess.on('error', (error) => {
+        safeLog(`[Ollama] Failed to start: ${error.message}`);
+        ollamaProcess = null;
+      });
+      ollamaProcess.on('close', () => {
+        ollamaProcess = null;
+      });
+    } catch (error) {
+      safeLog(`[Ollama] Failed to spawn: ${error instanceof Error ? error.message : error}`);
+      return 'start_failed';
+    }
+  }
+
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    await new Promise(resolve => setTimeout(resolve, 250));
+    if (await isOllamaRunning()) return 'started';
+  }
+  return 'start_failed';
 }
 
 function startPythonBackend() {
@@ -293,6 +357,10 @@ ipcMain.handle('open-external', async (_event, url: string) => {
   await shell.openExternal(url);
 });
 
+// Purpose-specific bridge: the renderer can request the known local Ollama
+// service, but cannot choose an executable or pass arbitrary arguments.
+ipcMain.handle('ensure-ollama', async (): Promise<OllamaStartupStatus> => ensureOllama());
+
 app.on('window-all-closed', () => {
   intentionalShutdown = true;
   if (pythonProcess) {
@@ -306,6 +374,13 @@ app.on('window-all-closed', () => {
       }
     } catch (e) {
       safeLog('Error killing backend:', e);
+    }
+  }
+  if (ollamaProcess?.pid) {
+    try {
+      spawn('taskkill', ['/pid', String(ollamaProcess.pid), '/f', '/t'], { windowsHide: true });
+    } catch (e) {
+      safeLog('Error stopping Ollama started by Mark Tini:', e);
     }
   }
   if (process.platform !== 'darwin') {

@@ -127,3 +127,23 @@
 - [x] NSIS installer 1.2.0 build pass
 - [ ] Clean-machine installer test pass
 - [ ] Runtime documents không còn nằm trong Git index/release commit
+
+---
+
+## Phase 9: Ollama Citation Onboarding ✅ COMPLETE
+
+**Mục tiêu:** Loại bỏ ngõ cụt UX của tính năng xác minh nội dung: OpenAlex và Ollama phải được mô tả tách biệt, Ollama đã cài được tự khởi động khi cần, và người dùng biết chính xác model/lệnh cần cài nếu máy chưa sẵn sàng.
+
+**SPEC:** `.viepilot/phases/phase-9-ollama-onboarding/SPEC.md`
+
+### Tasks
+
+- [x] **T9.1** Cấu hình model mặc định, tự khởi động Ollama theo yêu cầu và bổ sung onboarding có thao tác cụ thể
+
+### Acceptance Criteria
+
+- OpenAlex vẫn tra cứu online độc lập khi Ollama không khả dụng.
+- Bản Electron yêu cầu main process thử khởi động Ollama đã cài trước khi gọi xác minh.
+- Backend mặc định dùng `qwen2.5:3b`, nhưng vẫn cho phép override bằng biến môi trường.
+- UI nêu rõ Ollama là tùy chọn, model cần dùng, trang cài chính thức và lệnh `ollama pull`.
+- Backend tests, frontend lint/build và E2E liên quan vượt qua.

@@ -120,7 +120,7 @@ def load_settings() -> Settings:
         offline_mode=_read_bool("DOCUMARK_OFFLINE_MODE"),
         docling_artifacts_path=artifacts_path,
         ollama_base_url=_read_str("DOCUMARK_OLLAMA_URL", "http://127.0.0.1:11434"),
-        ollama_model=_read_str("DOCUMARK_OLLAMA_MODEL", None),
+        ollama_model=_read_str("DOCUMARK_OLLAMA_MODEL", "qwen2.5:3b"),
         translation_model_id=_read_str("DOCUMARK_TRANSLATION_MODEL", "VietAI/envit5-translation")
         or "VietAI/envit5-translation",
         translation_model_path=translation_model_path,

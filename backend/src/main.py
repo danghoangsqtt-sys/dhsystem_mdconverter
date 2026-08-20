@@ -458,9 +458,9 @@ async def verify_citation(payload: VerifyCitationRequest) -> dict[str, object]:
         raise HTTPException(status_code=400, detail="Không có nội dung để xác minh.")
 
     match = await citation_service.search_openalex(text)
-    llm_assessment: str | None = None
+    ollama_result = citation_service.OllamaAssessmentResult(text=None, status="not_configured")
     if settings.ollama_model:
-        llm_assessment = await citation_service.assess_with_ollama(
+        ollama_result = await citation_service.assess_with_ollama(
             text,
             match,
             base_url=settings.ollama_base_url,
@@ -469,8 +469,10 @@ async def verify_citation(payload: VerifyCitationRequest) -> dict[str, object]:
     result = citation_service.CitationVerificationResult(
         query_text=text,
         match=match,
-        llm_assessment=llm_assessment,
-        llm_available=llm_assessment is not None,
+        llm_assessment=ollama_result.text,
+        llm_available=ollama_result.status == "available",
+        llm_status=ollama_result.status,
+        llm_model=settings.ollama_model,
     )
     return result.public_state()
 

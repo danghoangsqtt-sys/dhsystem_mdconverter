@@ -54,6 +54,8 @@ class CitationVerificationResult:
     match: CitationMatch | None
     llm_assessment: str | None
     llm_available: bool
+    llm_status: str
+    llm_model: str | None
 
     def public_state(self) -> dict[str, object]:
         return {
@@ -61,7 +63,15 @@ class CitationVerificationResult:
             "match": self.match.public_state() if self.match else None,
             "llm_assessment": self.llm_assessment,
             "llm_available": self.llm_available,
+            "llm_status": self.llm_status,
+            "llm_model": self.llm_model,
         }
+
+
+@dataclass
+class OllamaAssessmentResult:
+    text: str | None
+    status: str
 
 
 async def search_openalex(query: str, *, timeout: float = 10.0) -> CitationMatch | None:
@@ -125,12 +135,11 @@ async def assess_with_ollama(
     base_url: str,
     model: str,
     timeout: float = 30.0,
-) -> str | None:
+) -> OllamaAssessmentResult:
     """Ask a local Ollama model for a hedged plausibility read.
 
-    Returns None (never raises) if Ollama is unreachable, times out, or
-    returns something unusable — the caller treats that as "assessment
-    unavailable", the same as Ollama not being installed at all.
+    Returns a stable status (never raises) so the UI can distinguish an
+    unreachable service from a missing model and show the correct setup step.
     """
     prompt = _OLLAMA_PROMPT_TEMPLATE.format(
         selected_text=selected_text.strip(),
@@ -144,11 +153,18 @@ async def assess_with_ollama(
             )
             response.raise_for_status()
             payload = response.json()
+    except httpx.HTTPStatusError as exc:
+        status = "model_missing" if exc.response.status_code == 404 else "error"
+        logger.info("Ollama assessment unavailable (%s): %s", status, exc)
+        return OllamaAssessmentResult(text=None, status=status)
+    except (httpx.ConnectError, httpx.TimeoutException) as exc:
+        logger.info("Ollama assessment unavailable (unreachable): %s", exc)
+        return OllamaAssessmentResult(text=None, status="unreachable")
     except (httpx.HTTPError, ValueError) as exc:
         logger.info("Ollama assessment unavailable: %s", exc)
-        return None
+        return OllamaAssessmentResult(text=None, status="error")
 
     text = payload.get("response")
     if not isinstance(text, str) or not text.strip():
-        return None
-    return text.strip()
+        return OllamaAssessmentResult(text=None, status="error")
+    return OllamaAssessmentResult(text=text.strip(), status="available")

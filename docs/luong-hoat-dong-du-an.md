@@ -82,10 +82,15 @@ Frontend gửi đoạn text tới /api/verify-citation
         ↓
 Backend gọi OpenAlex tìm nguồn gần khớp
         ↓
-Nếu cấu hình Ollama có sẵn, đánh giá độ phù hợp bằng AI cục bộ
+Electron kiểm tra và tự khởi động Ollama đã cài (nếu cần)
+        ↓
+Backend dùng model mặc định qwen2.5:3b để đánh giá tham khảo bằng AI cục bộ
         ↓
 Frontend hiển thị nguồn, khớp/không khớp và cảnh báo độ tin cậy
 ```
+
+- OpenAlex là bước tra cứu nguồn online và vẫn hoạt động khi Ollama không có.
+- Ollama là bước đánh giá AI local tùy chọn. Nếu thiếu Ollama/model, UI hiển thị trang cài chính thức và lệnh `ollama pull qwen2.5:3b` thay vì chỉ báo chung chung.
 
 ## 6. Luồng lưu trữ và lịch sử
 

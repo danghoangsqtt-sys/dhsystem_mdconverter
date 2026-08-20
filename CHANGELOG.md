@@ -3,6 +3,16 @@ Tất cả các thay đổi của dự án sẽ được cập nhật tại đâ
 
 ## [Unreleased]
 
+## [1.3.2] — 2026-08-20
+
+### Changed
+- **Packaging:** Đồng bộ metadata phiên bản và build lại bộ cài Windows để phân phối ngoại tuyến đầy đủ các bản sửa lỗi của v1.3.1 trong installer `Mark Tini Setup 1.3.2.exe`.
+
+### Fixed
+- **Frontend:** Sửa lỗi kiểm tra React 19 ở thao tác kéo giãn Sidebar do đọc `ref.current` trong lúc render; dùng state hiển thị riêng để tắt transition trong khi kéo mà không thay đổi hành vi người dùng.
+- **Backend/Electron:** Sửa tích hợp Ollama không thể kích hoạt trong bản đóng gói vì `DOCUMARK_OLLAMA_MODEL` mặc định để trống và app không khởi động service đã cài. Bản mới mặc định dùng `qwen2.5:3b`, vẫn cho phép override, và Electron tự khởi động Ollama theo yêu cầu khi người dùng xác minh nội dung.
+- **Frontend:** Thay thông báo cụt "Cần Ollama đang chạy" bằng hướng dẫn phân biệt OpenAlex online với đánh giá AI local, kèm nút mở trang cài Ollama chính thức và sao chép chính xác lệnh tải model.
+
 ## [1.3.1] — 2026-08-20
 
 ### Fixed

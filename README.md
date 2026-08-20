@@ -5,7 +5,7 @@
   
   **🚀 Chuyển đổi tài liệu sang Markdown — Hoàn toàn ngoại tuyến, chạy cục bộ trên Windows**
 
-  [![Version](https://img.shields.io/badge/version-1.3.0-58A6FF?style=for-the-badge)](CHANGELOG.md)
+  [![Version](https://img.shields.io/badge/version-1.3.2-58A6FF?style=for-the-badge)](CHANGELOG.md)
   [![License](https://img.shields.io/badge/license-MIT-3FB950?style=for-the-badge)](LICENSE)
   [![Platform](https://img.shields.io/badge/platform-Windows-0078D4?style=for-the-badge&logo=windows&logoColor=white)](README.md)
   [![Made with](https://img.shields.io/badge/made%20with-Electron%20%7C%20React-black?style=for-the-badge&logo=electron&logoColor=white)](frontend/package.json)
@@ -55,7 +55,7 @@ Từ phiên bản **v1.2.0** trở lên, Mark Tini sử dụng:
 | 📊 **Nhận dạng bảng thông minh** | Hai chế độ: `Accurate` (chính xác) hoặc `Fast` (nhanh) |
 | ✂️ **Trích xuất vùng PDF** | Vẽ khung chọn để OCR riêng một vùng, không phải cả trang |
 | 🔄 **Dịch đoạn Anh ↔ Việt** | Dịch offline bằng model NMT cục bộ, hỗ trợ thuật ngữ chuyên ngành |
-| 🔍 **Xác minh trích dẫn** | Kiểm tra câu trích dẫn qua OpenAlex API (cần internet) |
+| 🔍 **Xác minh trích dẫn** | Tra nguồn qua OpenAlex (online) và đánh giá tham khảo bằng Ollama `qwen2.5:3b` (local, tùy chọn) |
 | 📝 **Soạn thảo tích hợp** | Editor Markdown WYSIWYG, lưu tự động vào IndexedDB |
 | 📋 **Lịch sử chuyển đổi** | Giữ lại kết quả cũ, dễ dàng truy xuất hoặc xóa |
 | 🛡️ **Bảo mật & Riêng tư** | Chạy 100% cục bộ, token API per-session, giới hạn upload 100 MB |
@@ -113,7 +113,7 @@ Thiết kế chi tiết và các invariant nằm tại [ARCHITECTURE.md](.viepil
 
 ## Tài liệu phiên bản hiện tại
 
-Phiên bản hoàn thiện hiện tại: 1.3.0.
+Phiên bản hoàn thiện hiện tại: 1.3.2.
 
 - [Báo cáo kỹ thuật v1.3.0](docs/bao-cao-ky-thuat-v1.3.0.md)
 - [Hướng dẫn sử dụng v1.3.0](docs/huong-dan-su-dung-v1.3.0.md)
@@ -122,18 +122,28 @@ Phiên bản hoàn thiện hiện tại: 1.3.0.
 
 ## Trạng thái phát hành
 
-v1.3.0 là phiên bản hiện tại và đã được đánh dấu là release hoàn thiện với các cải tiến chính: sửa lỗi OCR vùng PDF, đơn giản hóa giao diện dịch, sidebar thu gọn/kéo giãn, lưu tự động bằng IndexedDB, offline model bundle và kiểm soát queue backend. Dự án đang ở trạng thái ổn định cho việc phát hành và dùng nội bộ/đẩy GitHub.
+v1.3.2 là bản vá đóng gói lại các sửa lỗi mới nhất: khôi phục thao tác mở file PDF gốc từ Markdown đã lưu và tăng timeout để xử lý PDF lớn trên 100 trang. Phiên bản này kế thừa toàn bộ cải tiến của v1.3.0 về OCR vùng PDF, giao diện dịch, sidebar, IndexedDB, offline model bundle và kiểm soát queue backend.
 
 ## 🚀 Cài đặt và sử dụng
 
 ### Cài đặt (Người dùng cuối)
 
-1. **Download installer**: Tải file `Mark Tini Setup 1.3.0.exe` từ [Release](../../releases/latest)
+1. **Nhận installer**: Chép file `Mark Tini Setup 1.3.2.exe` từ USB hoặc kênh lưu trữ nội bộ do DHSystem cung cấp
 2. **Chạy installer**: Double-click file `.exe`, làm theo hướng dẫn
 3. **Khởi chạy**: Mở ứng dụng từ Desktop hoặc Start Menu
 4. **Lần đầu**: Chờ 10-60 giây để nạp model AI (tuỳ thuộc cấu hình máy)
 
 > 💡 Không cần cài Python, Node.js, hoặc bất kỳ dependency nào — mọi thứ đã được đóng gói sẵn
+
+#### Bật đánh giá AI cục bộ khi xác minh nội dung (tùy chọn)
+
+Tra cứu nguồn OpenAlex hoạt động qua internet mà không cần Ollama. Để có thêm phần đánh giá AI cục bộ về mức độ nội dung được nguồn tìm thấy hỗ trợ:
+
+1. Cài [Ollama cho Windows](https://ollama.com/download/windows).
+2. Mở PowerShell hoặc Command Prompt và chạy `ollama pull qwen2.5:3b` (khoảng 1,9 GB).
+3. Bôi đen nội dung và bấm **Xác minh trích dẫn**. Mark Tini sẽ tự khởi động Ollama đã cài khi cần.
+
+Model mặc định hỗ trợ tiếng Việt và có thể thay bằng biến môi trường `DOCUMARK_OLLAMA_MODEL`. Ollama/model không được nhúng vào installer chính để tránh tăng bộ cài gần 2 GB lên gần 4 GB; có thể chuẩn bị Ollama và model riêng trên USB cho máy không có internet.
 
 ### Hướng dẫn sử dụng
 
@@ -185,7 +195,7 @@ Quy trình build tự động:
 1. Tạo runtime Python embeddable nếu chưa có
 2. Tải model Docling/EasyOCR/translation vào `offline_models/`
 3. Validate dependency lock (`requirements.lock.txt`)
-4. Build NSIS installer → `frontend/release/Mark Tini Setup 1.3.0.exe`
+4. Build NSIS installer → `frontend/release/Mark Tini Setup 1.3.2.exe`
 
 ---
 
@@ -293,9 +303,11 @@ Kiểm tra:
 
 ## 📊 Trạng thái phát hành
 
-### Phiên bản hiện tại: **v1.3.0** (2026-08-20)
+### Phiên bản hiện tại: **v1.3.2** (2026-08-20)
 
 **Cải tiến chính:**
+- ✅ Khôi phục thao tác mở lại file PDF gốc từ Markdown đã lưu
+- ✅ Tăng timeout chuyển đổi cho PDF lớn trên 100 trang
 - ✅ Sửa lỗi trích xuất vùng PDF trả về placeholder
 - ✅ Đơn giản hoá UI panel dịch
 - ✅ Thêm sidebar thu gọn/kéo giãn

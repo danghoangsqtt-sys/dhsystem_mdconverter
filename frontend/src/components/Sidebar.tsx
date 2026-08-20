@@ -88,6 +88,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   const [collapsed, setCollapsed] = useState<boolean>(
     () => localStorage.getItem(COLLAPSED_STORAGE_KEY) === 'true'
   );
+  const [isDragging, setIsDragging] = useState(false);
   const isDraggingRef = useRef(false);
 
   useEffect(() => {
@@ -101,6 +102,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     isDraggingRef.current = true;
+    setIsDragging(true);
     const startX = e.clientX;
     const startWidth = width;
 
@@ -111,6 +113,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     };
     const handleMouseUp = () => {
       isDraggingRef.current = false;
+      setIsDragging(false);
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
@@ -141,7 +144,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       className="relative bg-[#fbfbfa] border-r border-[#e5e7eb] h-full flex flex-col flex-shrink-0 z-20"
       style={{
         width: collapsed ? COLLAPSED_WIDTH : width,
-        transition: isDraggingRef.current ? 'none' : 'width 150ms ease',
+        transition: isDragging ? 'none' : 'width 150ms ease',
       }}
     >
       <button

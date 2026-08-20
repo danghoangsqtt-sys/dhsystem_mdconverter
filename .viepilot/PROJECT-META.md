@@ -1,13 +1,13 @@
 # Thông Tin Dự Án (Project Meta)
 
 ## Project Info
-- **Project Name:** DocuMark AI Editor (Local Markdown Converter)
+- **Project Name:** Mark Tini (Local Markdown Converter)
 - **Short Name:** markdown_convert
-- **Description:** Ứng dụng local chuyển đổi DOCX/PDF sang Markdown chất lượng cao dùng Docling, tối ưu cho AI đọc. Có giao diện editor chuyên nghiệp (MDEditor).
-- **Version:** 1.1.0
+- **Description:** Ứng dụng local chuyển đổi PDF/DOCX/PPTX/HTML/ảnh sang Markdown chất lượng cao dùng Docling, tối ưu cho AI đọc. Có giao diện editor chuyên nghiệp (MDEditor).
+- **Version:** 1.3.2
 - **Inception Year:** 2026
 - **License:** MIT
-- **Repository:** Local (no remote)
+- **Repository:** https://github.com/danghoangsqtt-sys/dhsystem_mdconverter
 
 ## Organization
 - **Name:** Cá nhân / Nội bộ
@@ -18,9 +18,9 @@
 | Layer | Technology |
 |-------|-----------|
 | Backend | Python 3.x, FastAPI, Docling |
-| Frontend | React 18, Vite, TypeScript, TailwindCSS |
+| Frontend | React 19, Vite, TypeScript, TailwindCSS |
 | Editor | @uiw/react-md-editor |
-| Packaging | Electron (optional), start.bat |
+| Packaging | Electron 42, NSIS, start.bat |
 
 ## Developer Info
 - **Lead:** danghoangsqtt-sys

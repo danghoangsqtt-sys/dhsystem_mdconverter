@@ -1,10 +1,10 @@
 # Theo Dõi Tiến Độ (Tracker)
 
 ## Current State
-- **Current Phase:** Phase 8 — Reliability, Security & True Offline Packaging
-- **Status:** Implementation Complete — release gated by clean-machine test and approved Git data cleanup
-- **Version:** 1.2.0-rc
-- **Last Updated:** 2026-08-18
+- **Current Phase:** Phase 9 — Ollama Citation Onboarding
+- **Status:** v1.3.2 installer built and installed locally — clean-machine gate remains
+- **Version:** 1.3.2
+- **Last Updated:** 2026-08-20
 
 ## Phase Progress
 
@@ -18,6 +18,7 @@
 | 6 | Fix UX Processing Status | ↪ Absorbed into Phase 8 | Replaced by real job status |
 | 7 | SSE Real-time Streaming | ↪ Superseded | Job polling chosen for reliable upload/cancel flow |
 | 8 | Reliability, Security & True Offline Packaging | 🟡 Release Gated | Implementation/tests/installer complete; 2 manual gates remain |
+| 9 | Ollama Citation Onboarding | ✅ Complete | Tests, Electron IPC smoke and real qwen2.5:3b inference pass |
 
 ## Phase 4 Task Detail
 | Task | Description | Status |
@@ -39,3 +40,6 @@
 - **2026-05-18:** Principle "never drop content silently" được đưa vào SYSTEM-RULES
 - **2026-08-18:** Phase 8 implementation hoàn tất: tokenized API, bounded job queue, actual progress/cancel, atomic storage và content-preserving cleaner
 - **2026-08-18:** Portable runtime + offline models và NSIS 1.2.0 build/smoke pass; clean-machine test và cleanup tracked runtime data vẫn là release gates
+- **2026-08-20:** Đồng bộ phiên bản 1.3.2 và build lại installer Windows với các bản sửa lỗi của v1.3.1
+- **2026-08-21:** Hoàn tất Phase 9: tự khởi động Ollama theo yêu cầu, model mặc định `qwen2.5:3b` và onboarding rõ ràng; 81 backend tests + lint/build + 2 Electron E2E pass
+- **2026-08-21:** NSIS 1.3.2 build và cài đặt local pass; executable đã cài trả `version=1.3.2`, tiêu đề `Mark Tini`, bridge Ollama trả `started`
