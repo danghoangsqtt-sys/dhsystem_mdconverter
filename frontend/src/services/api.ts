@@ -232,6 +232,22 @@ export const fetchHistoryItem = async (jobId: string): Promise<HistoryEntryDetai
   return response.data;
 };
 
+export const fetchHistoryOriginal = async (jobId: string): Promise<Blob> => {
+  try {
+    const response = await axios.get<Blob>(`${API_BASE_URL}/history/${jobId}/original`, {
+      headers: await authHeaders(),
+      responseType: 'blob',
+      timeout: 60000,
+    });
+    return response.data;
+  } catch (error) {
+    throw new Error(
+      getErrorMessage(error, 'Không thể khôi phục tài liệu gốc.'),
+      { cause: error },
+    );
+  }
+};
+
 export const deleteHistoryItem = async (jobId: string): Promise<void> => {
   await axios.delete(`${API_BASE_URL}/history/${jobId}`, {
     headers: await authHeaders(),

@@ -1,15 +1,17 @@
+import gc
 import os
 import logging
 import threading
 import tempfile
 from pathlib import Path
+from typing import Any
 
 from PIL import Image
 
 from ..config import settings
 
-from docling.document_converter import DocumentConverter, PdfFormatOption, WordFormatOption, ImageFormatOption
-from docling.datamodel.base_models import InputFormat
+from docling.document_converter import DocumentConverter, PdfFormatOption, WordFormatOption
+from docling.datamodel.base_models import ConversionStatus, InputFormat
 from docling.datamodel.pipeline_options import PdfPipelineOptions, TableFormerMode, EasyOcrOptions
 
 from .markdown_cleaner import clean_markdown
@@ -40,6 +42,13 @@ TABLE_MODES: dict[str, "TableFormerMode"] = {
 }
 DEFAULT_TABLE_MODE = "accurate"
 
+# Large scanned PDFs can make the native PDF preprocessing stage retain too
+# many page bitmaps at once.  Keep both Docling's internal inference batches
+# and our page ranges bounded.  Failed ranges are split recursively below, so
+# this is a performance knob rather than a correctness limit.
+PDF_CHUNK_SIZE = 8
+PDF_FALLBACK_MAX_DIMENSION = 2200
+
 # Each (lang, table_mode) combination needs its own DocumentConverter,
 # since docling binds OCR language and table-recognition mode into the
 # pipeline at construction time (no per-call override exists). Building all
@@ -49,6 +58,8 @@ DEFAULT_TABLE_MODE = "accurate"
 _converter_cache: dict[tuple[str, str], DocumentConverter] = {}
 _cache_lock = threading.Lock()
 _conversion_lock = threading.Lock()
+_region_reader_cache: dict[str, Any] = {}
+_region_reader_lock = threading.Lock()
 
 
 def _build_converter(lang_key: str, table_mode_key: str) -> DocumentConverter:
@@ -77,6 +88,13 @@ def _build_converter(lang_key: str, table_mode_key: str) -> DocumentConverter:
     # Uses the local CodeFormulaV2 model (bundled offline, no remote calls).
     pipeline_options.do_formula_enrichment = True
     pipeline_options.do_code_enrichment = True
+    # The defaults are 4.  A real 128-page driving-test PDF exhausted native
+    # memory (std::bad_alloc) with those settings and Docling returned a silent
+    # partial_success.  Single-item ML batches trade some throughput for a
+    # much lower and predictable memory peak on ordinary Windows machines.
+    pipeline_options.layout_batch_size = 1
+    pipeline_options.ocr_batch_size = 1
+    pipeline_options.table_batch_size = 1
 
     return DocumentConverter(
         format_options={
@@ -86,11 +104,6 @@ def _build_converter(lang_key: str, table_mode_key: str) -> DocumentConverter:
             # No ML table-structure options exist for this pipeline; native XML
             # parsing already preserves the table layout from the Word file.
             InputFormat.DOCX: WordFormatOption(),
-            # IMAGE: standalone images (e.g. a cropped region exported from the
-            # PDF viewer's region-extraction tool) go through the same
-            # StandardPdfPipeline as PDF pages, so they need the same OCR
-            # language config to read Vietnamese/English text correctly.
-            InputFormat.IMAGE: ImageFormatOption(pipeline_options=pipeline_options),
         }
     )
 
@@ -202,6 +215,193 @@ def upscale_region_image(file_path: str, min_width: int = 600) -> str:
         return file_path
 
 
+class IncompleteDocumentConversionError(RuntimeError):
+    """Raised when Docling could not account for every requested page."""
+
+
+def _get_region_reader(lang_key: str) -> Any:
+    if lang_key not in OCR_LANG_PRESETS:
+        lang_key = DEFAULT_OCR_LANG
+    with _region_reader_lock:
+        reader = _region_reader_cache.get(lang_key)
+        if reader is not None:
+            return reader
+
+        import easyocr
+
+        model_dir: str | None = None
+        if settings.docling_artifacts_path is not None:
+            candidate = settings.docling_artifacts_path / "EasyOcr"
+            if candidate.is_dir():
+                model_dir = str(candidate)
+        reader = easyocr.Reader(
+            OCR_LANG_PRESETS[lang_key],
+            gpu=False,
+            model_storage_directory=model_dir,
+            download_enabled=not settings.offline_mode,
+        )
+        _region_reader_cache[lang_key] = reader
+        return reader
+
+
+def _extract_region_text(image_path: Path, lang_key: str) -> str:
+    """OCR every pixel in a user-selected crop without layout filtering.
+
+    Docling's document pipeline is intentionally conservative and can discard
+    small bullet lines as low-confidence layout noise.  A crop is explicit
+    user intent, so use EasyOCR directly with permissive detection thresholds
+    and preserve every recognized line for review/editing in the UI.
+    """
+    reader = _get_region_reader(lang_key)
+    lines = reader.readtext(
+        str(image_path),
+        detail=0,
+        paragraph=False,
+        decoder="beamsearch",
+        canvas_size=3200,
+        mag_ratio=2.0,
+        text_threshold=0.3,
+        low_text=0.2,
+        link_threshold=0.2,
+    )
+    text = "\n".join(str(line).strip() for line in lines if str(line).strip())
+    logger.info("Direct region OCR extracted %s non-empty lines", len(text.splitlines()))
+    return text
+
+
+def _conversion_error_summary(result: Any) -> str:
+    errors = getattr(result, "errors", None) or []
+    messages = [str(getattr(item, "error_message", item)).strip() for item in errors]
+    return "; ".join(message for message in messages if message) or "unknown Docling error"
+
+
+def _is_complete_result(result: Any, expected_pages: int | None = None) -> bool:
+    if getattr(result, "status", None) != ConversionStatus.SUCCESS:
+        return False
+    if expected_pages is None:
+        return True
+    pages = getattr(result, "pages", None)
+    return pages is not None and len(pages) == expected_pages
+
+
+def _export_result(result: Any) -> str:
+    if result.input.format == InputFormat.IMAGE:
+        # Image inputs are user-selected OCR regions or raster fallbacks for a
+        # problematic PDF page.  Reading text items directly avoids Docling's
+        # occasional misclassification of a whole image as a Picture block.
+        return "\n\n".join(
+            item.text.strip()
+            for item in result.document.texts
+            if item.text and item.text.strip()
+        )
+    return result.document.export_to_markdown()
+
+
+def _get_pdf_page_count(file_path: Path) -> int:
+    import pypdfium2 as pdfium
+
+    document = pdfium.PdfDocument(str(file_path))
+    try:
+        return len(document)
+    finally:
+        document.close()
+
+
+def _render_pdf_page_to_image(file_path: Path, page_number: int, output_path: Path) -> None:
+    """Rasterize one 1-based PDF page with a strict pixel-size ceiling."""
+    import pypdfium2 as pdfium
+
+    document = pdfium.PdfDocument(str(file_path))
+    page = None
+    bitmap = None
+    try:
+        page = document[page_number - 1]
+        width, height = page.get_size()
+        longest_edge = max(width, height, 1)
+        scale = max(0.05, min(2.0, PDF_FALLBACK_MAX_DIMENSION / longest_edge))
+        bitmap = page.render(scale=scale)
+        bitmap.to_pil().convert("RGB").save(output_path, format="PNG", optimize=False)
+    finally:
+        if bitmap is not None:
+            bitmap.close()
+        if page is not None:
+            page.close()
+        document.close()
+
+
+def _convert_rasterized_pdf_page(
+    converter: DocumentConverter,
+    file_path: Path,
+    page_number: int,
+    lang_key: str,
+) -> str:
+    with tempfile.TemporaryDirectory(prefix="marktini_pdf_page_") as temp_dir:
+        image_path = Path(temp_dir) / f"page-{page_number}.png"
+        _render_pdf_page_to_image(file_path, page_number, image_path)
+        text = _extract_region_text(image_path, lang_key)
+        if not text.strip():
+            raise IncompleteDocumentConversionError(
+                f"Không thể xử lý đầy đủ trang {page_number}: OCR dự phòng không nhận diện được văn bản."
+            )
+        logger.warning("Recovered PDF page %s through bounded raster OCR", page_number)
+        return text
+
+
+def _convert_pdf_range(
+    converter: DocumentConverter,
+    file_path: Path,
+    start_page: int,
+    end_page: int,
+    lang_key: str = DEFAULT_OCR_LANG,
+) -> str:
+    expected_pages = end_page - start_page + 1
+    result = converter.convert(
+        file_path,
+        raises_on_error=False,
+        page_range=(start_page, end_page),
+    )
+    if _is_complete_result(result, expected_pages=expected_pages):
+        return _export_result(result)
+
+    logger.warning(
+        "Incomplete PDF range %s-%s (status=%s, pages=%s/%s): %s",
+        start_page,
+        end_page,
+        getattr(result, "status", "unknown"),
+        len(getattr(result, "pages", None) or []),
+        expected_pages,
+        _conversion_error_summary(result),
+    )
+    del result
+    gc.collect()
+
+    if start_page == end_page:
+        return _convert_rasterized_pdf_page(converter, file_path, start_page, lang_key)
+
+    midpoint = (start_page + end_page) // 2
+    left = _convert_pdf_range(converter, file_path, start_page, midpoint, lang_key)
+    right = _convert_pdf_range(converter, file_path, midpoint + 1, end_page, lang_key)
+    return "\n\n".join(part for part in (left, right) if part.strip())
+
+
+def _convert_pdf_in_chunks(
+    converter: DocumentConverter,
+    file_path: Path,
+    lang_key: str = DEFAULT_OCR_LANG,
+) -> str:
+    page_count = _get_pdf_page_count(file_path)
+    if page_count < 1:
+        raise IncompleteDocumentConversionError("PDF không có trang nào để xử lý.")
+
+    logger.info("Processing %s-page PDF in chunks of at most %s pages", page_count, PDF_CHUNK_SIZE)
+    chunks: list[str] = []
+    for start_page in range(1, page_count + 1, PDF_CHUNK_SIZE):
+        end_page = min(start_page + PDF_CHUNK_SIZE - 1, page_count)
+        chunks.append(_convert_pdf_range(converter, file_path, start_page, end_page, lang_key))
+        gc.collect()
+    return "\n\n".join(chunk for chunk in chunks if chunk.strip())
+
+
 def convert_document_to_markdown(
     file_path: str,
     lang: str = DEFAULT_OCR_LANG,
@@ -224,8 +424,6 @@ def convert_document_to_markdown(
         raise FileNotFoundError(f"File not found: {file_path}")
 
     try:
-        converter = get_converter(lang, table_mode)
-
         import pathlib
         resolved_path = pathlib.Path(file_path).resolve()
         
@@ -238,38 +436,29 @@ def convert_document_to_markdown(
         
         resolved_processing_path = pathlib.Path(processing_path).resolve()
         logger.info(f"Starting conversion for: {resolved_processing_path} (lang={lang}, table_mode={table_mode}, region={is_region_image})")
-        
-        # DocumentConverter pipelines hold native/ML state and are not treated
-        # as thread-safe. The API job queue is also single-worker, but this lock
-        # protects direct library callers and startup/request overlap.
-        with _conversion_lock:
-            result = converter.convert(resolved_processing_path)
 
-        if result.input.format == InputFormat.IMAGE:
-            # Standalone images only ever reach this function as cropped OCR
-            # snippets from the PDF viewer's region-extraction tool (never a
-            # general document upload), so the user always wants recognized
-            # text back. docling's layout model is unreliable on small/sparse
-            # crops like these: it often spuriously tags part of the image as
-            # a Picture cluster, which either duplicates a "<!-- image -->"
-            # placeholder next to the real text, or — when the cluster
-            # overlaps the text — reparents the OCR'd TextItems as that
-            # Picture's children, where the default markdown export never
-            # surfaces them. Reading document.texts directly sidesteps the
-            # layout/picture classification entirely and always recovers
-            # whatever text OCR actually found.
-            
-            # Collect all OCR text with minimal filtering — upscaled images
-            # can handle lower confidence. Keep everything, even single chars,
-            # since region extraction is user-intent-driven (they selected it).
-            # Better to include 1 extra char than lose part of the answer.
-            raw_markdown = "\n\n".join(
-                t.text.strip() for t in result.document.texts 
-                if t.text and len(t.text.strip()) >= 1  # Keep any text ≥1 char
-            )
-            logger.info(f"Extracted {len(result.document.texts)} text items from region image, min filter: 1 char")
+        if is_region_image:
+            raw_markdown = _extract_region_text(resolved_processing_path, lang)
         else:
-            raw_markdown = result.document.export_to_markdown()
+            converter = get_converter(lang, table_mode)
+            # DocumentConverter pipelines hold native/ML state and are not treated
+            # as thread-safe. The API job queue is also single-worker, but this lock
+            # protects direct library callers and startup/request overlap.
+            with _conversion_lock:
+                if resolved_processing_path.suffix.lower() == ".pdf":
+                    raw_markdown = _convert_pdf_in_chunks(
+                        converter,
+                        resolved_processing_path,
+                        lang,
+                    )
+                else:
+                    result = converter.convert(resolved_processing_path, raises_on_error=False)
+                    if not _is_complete_result(result):
+                        raise IncompleteDocumentConversionError(
+                            "Docling không thể xử lý đầy đủ tài liệu: "
+                            f"{_conversion_error_summary(result)}"
+                        )
+                    raw_markdown = _export_result(result)
         logger.info(f"Raw conversion complete: {resolved_processing_path}")
 
         # Post-process: clean up tables, remove empty columns, etc.

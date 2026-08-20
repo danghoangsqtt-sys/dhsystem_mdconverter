@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import shutil
 import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -67,6 +68,24 @@ def _atomic_write_text(path: Path, content: str) -> None:
             pass
 
 
+def _atomic_copy_file(source: Path, destination: Path) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = destination.with_suffix(
+        f"{destination.suffix}.tmp-{os.getpid()}-{threading.get_ident()}"
+    )
+    try:
+        with open(source, "rb") as input_handle, open(temp_path, "wb") as output_handle:
+            shutil.copyfileobj(input_handle, output_handle, length=1024 * 1024)
+            output_handle.flush()
+            os.fsync(output_handle.fileno())
+        os.replace(temp_path, destination)
+    finally:
+        try:
+            temp_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
 @dataclass
 class ConversionJob:
     job_id: str
@@ -121,14 +140,16 @@ class ConversionJobManager:
     def __init__(
         self,
         *,
-        converter: Callable[[str, str, str], str],
+        converter: Callable[[str, str, str, str | None], str],
         output_dir: Path,
         history_path: Path,
+        original_dir: Path | None = None,
         max_history_entries: int = 200,
         max_job_records: int = 250,
     ) -> None:
         self._converter = converter
         self._output_dir = output_dir
+        self._original_dir = original_dir
         self._history_path = history_path
         self._max_history_entries = max_history_entries
         self._max_job_records = max_job_records
@@ -219,6 +240,7 @@ class ConversionJobManager:
     async def _run_job(self, job: ConversionJob) -> None:
         job.set_status("converting")
         output_path: Path | None = None
+        original_path: Path | None = None
         history_written = False
         try:
             markdown = await asyncio.to_thread(
@@ -226,6 +248,7 @@ class ConversionJobManager:
                 str(job.upload_path),
                 job.lang,
                 job.table_mode,
+                job.original_filename,
             )
 
             if job.cancel_requested:
@@ -241,9 +264,14 @@ class ConversionJobManager:
                 return
             if job.record_history:
                 output_path = self._output_dir / f"{job.job_id}.md"
+                if self._original_dir is not None:
+                    original_path = self._original_dir / f"{job.job_id}{job.upload_path.suffix.lower()}"
+                    await asyncio.to_thread(_atomic_copy_file, job.upload_path, original_path)
                 await asyncio.to_thread(_atomic_write_text, output_path, markdown)
                 if job.cancel_requested:
                     output_path.unlink(missing_ok=True)
+                    if original_path is not None:
+                        original_path.unlink(missing_ok=True)
                     job.markdown = None
                     job.set_status("cancelled")
                     return
@@ -264,6 +292,8 @@ class ConversionJobManager:
                         job.job_id,
                     )
                     output_path.unlink(missing_ok=True)
+                    if original_path is not None:
+                        original_path.unlink(missing_ok=True)
                     job.markdown = None
                     job.set_status("cancelled")
                     return
@@ -272,6 +302,7 @@ class ConversionJobManager:
                         (self._output_dir / f"{evicted_job_id}.md").unlink(missing_ok=True)
                     except OSError as exc:
                         logger.warning("Failed to remove evicted output %s: %s", evicted_job_id, exc)
+                    self._remove_original(evicted_job_id)
             job.set_status("complete")
         except Exception:
             logger.exception("Conversion job %s failed", job.job_id)
@@ -286,6 +317,11 @@ class ConversionJobManager:
                     output_path.unlink(missing_ok=True)
                 except OSError as exc:
                     logger.warning("Failed to clean incomplete output %s: %s", output_path, exc)
+            if original_path is not None:
+                try:
+                    original_path.unlink(missing_ok=True)
+                except OSError as exc:
+                    logger.warning("Failed to clean incomplete original %s: %s", original_path, exc)
             job.markdown = None
             job.set_status("error", error="Không thể chuyển đổi tài liệu. Vui lòng kiểm tra định dạng và thử lại.")
         finally:
@@ -297,6 +333,16 @@ class ConversionJobManager:
             job.upload_path.unlink(missing_ok=True)
         except OSError as exc:
             logger.warning("Failed to remove upload for job %s: %s", job.job_id, exc)
+
+    def _remove_original(self, job_id: str) -> None:
+        if self._original_dir is None or not self._original_dir.is_dir():
+            return
+        for candidate in self._original_dir.iterdir():
+            if candidate.is_file() and not candidate.is_symlink() and candidate.stem == job_id:
+                try:
+                    candidate.unlink()
+                except OSError as exc:
+                    logger.warning("Failed to remove original for job %s: %s", job_id, exc)
 
     def _prune_job_records(self, *, target_count: int | None = None) -> None:
         target = self._max_job_records if target_count is None else max(0, target_count)

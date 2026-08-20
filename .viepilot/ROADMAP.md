@@ -147,3 +147,19 @@
 - Backend mặc định dùng `qwen2.5:3b`, nhưng vẫn cho phép override bằng biến môi trường.
 - UI nêu rõ Ollama là tùy chọn, model cần dùng, trang cài chính thức và lệnh `ollama pull`.
 - Backend tests, frontend lint/build và E2E liên quan vượt qua.
+
+---
+
+## Phase 10: Large PDF Reliability & Document Workflow UX ✅ COMPLETE
+
+**Mục tiêu:** Không bao giờ lưu kết quả PDF thiếu nội dung; hỗ trợ xử lý cả thư mục; sửa OCR vùng, phục hồi tài liệu gốc và khả năng kéo giãn bảng kết quả.
+
+**SPEC:** `.viepilot/phases/phase-10-large-pdf-folder-batch/SPEC.md`
+
+### Tasks
+
+- [x] **T10.1** Chia cụm PDF, phục hồi trang lỗi, kiểm tra đủ trang và xử lý batch thư mục tuần tự.
+- [x] OCR chuyên dụng cho vùng khoanh nhỏ và thao tác kéo vùng ổn định.
+- [x] Lưu tài liệu gốc theo lịch sử và mở lại PDF sau khi khởi động ứng dụng.
+- [x] Thêm tay nắm kéo dọc cho bảng vùng đã trích xuất.
+- [x] 87 backend tests, lint/build, React Doctor changed-scope và 4 Electron E2E đạt.

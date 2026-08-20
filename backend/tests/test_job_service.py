@@ -22,7 +22,8 @@ class JobServiceTests(unittest.IsolatedAsyncioTestCase):
         self.max_active = 0
         self.lock = threading.Lock()
 
-        def converter(path: str, _lang: str, _table_mode: str) -> str:
+        def converter(path: str, _lang: str, _table_mode: str, original_filename: str | None) -> str:
+            self.assertIsNotNone(original_filename)
             with self.lock:
                 self.active += 1
                 self.max_active = max(self.max_active, self.active)
@@ -34,6 +35,7 @@ class JobServiceTests(unittest.IsolatedAsyncioTestCase):
         self.manager = ConversionJobManager(
             converter=converter,
             output_dir=self.output_dir,
+            original_dir=self.root / "originals",
             history_path=self.history_path,
             max_history_entries=1,
         )
@@ -80,18 +82,28 @@ class JobServiceTests(unittest.IsolatedAsyncioTestCase):
         await second.done.wait()
         self.assertFalse((self.output_dir / f"{first.job_id}.md").exists())
         self.assertTrue((self.output_dir / f"{second.job_id}.md").exists())
+        self.assertFalse((self.root / "originals" / f"{first.job_id}.pdf").exists())
+        self.assertTrue((self.root / "originals" / f"{second.job_id}.pdf").exists())
+
+    async def test_successful_history_job_persists_original_source(self) -> None:
+        job = await self.submit("source.pdf")
+        await job.done.wait()
+        original = self.root / "originals" / f"{job.job_id}.pdf"
+        self.assertTrue(original.is_file())
+        self.assertEqual(original.read_bytes(), b"input")
 
     async def test_queue_capacity_is_bounded_and_completed_records_are_pruned(self) -> None:
         await self.manager.stop()
         gate = threading.Event()
 
-        def blocked_converter(path: str, _lang: str, _mode: str) -> str:
+        def blocked_converter(path: str, _lang: str, _mode: str, _original: str | None) -> str:
             gate.wait(timeout=2)
             return f"converted:{Path(path).name}"
 
         self.manager = ConversionJobManager(
             converter=blocked_converter,
             output_dir=self.output_dir,
+            original_dir=self.root / "originals",
             history_path=self.history_path,
             max_job_records=1,
         )

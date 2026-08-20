@@ -58,6 +58,10 @@ const DEFAULT_WIDTH = 256;
 const COLLAPSED_WIDTH = 56;
 const WIDTH_STORAGE_KEY = 'documark_sidebar_width';
 const COLLAPSED_STORAGE_KEY = 'documark_sidebar_collapsed';
+const DIRECTORY_INPUT_PROPS = {
+  webkitdirectory: '',
+  directory: '',
+} as React.InputHTMLAttributes<HTMLInputElement>;
 
 const Sidebar: React.FC<SidebarProps> = ({
   onFilesUpload,
@@ -76,6 +80,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   onDeleteHistoryItem,
 }) => {
   const pdfInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
   const mdInputRef = useRef<HTMLInputElement>(null);
   const backendReady = backendStatus === 'ready';
   const backendFailed = backendStatus === 'error' || backendStatus === 'unreachable';
@@ -127,6 +132,15 @@ const Sidebar: React.FC<SidebarProps> = ({
     }
     if (pdfInputRef.current) {
       pdfInputRef.current.value = '';
+    }
+  };
+
+  const handleFolderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      onFilesUpload(Array.from(e.target.files));
+    }
+    if (folderInputRef.current) {
+      folderInputRef.current.value = '';
     }
   };
 
@@ -195,8 +209,24 @@ const Sidebar: React.FC<SidebarProps> = ({
                 <Upload size={20} className="group-hover:scale-110 transition-transform" />
               )}
               <span className="font-semibold">
-                {isProcessing ? 'Đang xử lý...' : !backendReady ? 'Đang khởi động...' : 'Chọn PDF & Chuyển đổi'}
+                {isProcessing ? 'Đang xử lý...' : !backendReady ? 'Đang khởi động...' : 'Chọn tài liệu'}
               </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => folderInputRef.current?.click()}
+              disabled={uploadDisabled}
+              title={backendReady ? 'Chọn một thư mục và xử lý tuần tự các tài liệu được hỗ trợ' : backendDetail}
+              className={`w-full mt-2 flex items-center justify-center gap-2 py-1.5 px-3 rounded-md border text-xs font-semibold transition-colors
+                ${uploadDisabled
+                  ? 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed'
+                  : 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100'
+                }
+              `}
+            >
+              <FolderOpen size={16} />
+              <span>Chọn cả thư mục</span>
             </button>
 
             {/* .doc (legacy binary Word) is deliberately excluded: docling only
@@ -204,6 +234,15 @@ const Sidebar: React.FC<SidebarProps> = ({
                 multiple: batch upload processes each file sequentially (see
                 App.tsx's handleFilesUpload). */}
             <input type="file" multiple ref={pdfInputRef} onChange={handlePdfChange} accept=".pdf,.docx,.pptx,.html" className="hidden" />
+            <input
+              type="file"
+              multiple
+              ref={folderInputRef}
+              onChange={handleFolderChange}
+              accept=".pdf,.docx,.pptx,.html"
+              className="hidden"
+              {...DIRECTORY_INPUT_PROPS}
+            />
             <input type="file" ref={mdInputRef} onChange={handleMdChange} accept=".md,.markdown,.txt" className="hidden" />
 
             <div className="grid grid-cols-2 gap-1.5 mt-2.5">
@@ -297,7 +336,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                 </div>
                 <div>
                   <p className="font-bold text-gray-800 leading-tight">Mark Tini</p>
-                  <p className="text-[10px] text-gray-400">Phiên bản 1.2.0</p>
+                  <p className="text-[10px] text-gray-400">Phiên bản 1.4.0</p>
                 </div>
               </div>
 

@@ -3,6 +3,23 @@ Tất cả các thay đổi của dự án sẽ được cập nhật tại đâ
 
 ## [Unreleased]
 
+## [1.4.0] — 2026-08-21
+
+### Added
+- **Frontend:** Thêm nút **Chọn cả thư mục** để xếp hàng toàn bộ tệp PDF, DOCX, PPTX và HTML trong thư mục/các thư mục con. Hàng đợi hiển thị rõ `[tệp hiện tại/tổng số]`, bỏ qua định dạng không hỗ trợ và tổng kết số tệp thành công.
+- **Backend/Frontend:** Lưu bản sao tài liệu gốc cùng mục lịch sử và thêm nút **Mở tài liệu gốc**. PDF được khôi phục ngay trong trình xem sau khi mở lại ứng dụng; mục lịch sử cũ chưa có bản sao sẽ yêu cầu người dùng chọn lại đúng định dạng nguồn.
+
+### Changed
+- **Backend:** PDF được xử lý theo cụm tối đa 8 trang và batch ML được giảm từ 4 xuống 1 để hạ đỉnh RAM. Cụm lỗi tự chia đôi; trang đơn vẫn lỗi được raster hóa với giới hạn 2.200 px rồi OCR lại.
+- **Frontend:** Batch nhiều tài liệu tiếp tục chạy tuần tự có chủ đích để không cho nhiều pipeline Docling tranh bộ nhớ trên máy người dùng.
+- **Frontend:** Khung **Vùng đã trích xuất** có tay nắm kéo dọc, hỗ trợ bàn phím và nhớ chiều cao đã chọn; từng ô kết quả cũng có thể kéo cao/thấp riêng.
+
+### Fixed
+- **Backend:** Sửa nguyên nhân thật khiến PDF bộ 600 câu hỏi (128+ trang) chỉ xuất đến câu 195/trang 44. Docling đã báo `std::bad_alloc` và trả `partial_success`, nhưng ứng dụng cũ bỏ qua trạng thái này rồi lưu kết quả thiếu như hoàn tất. Bản mới kiểm tra đủ số trang và tuyệt đối không ghi lịch sử thành công nếu vẫn còn trang lỗi.
+- **Backend/Frontend:** Sửa OCR vùng khoanh nhỏ bỏ sót chữ bằng pipeline EasyOCR chuyên dụng, phóng đại ảnh và dùng ngưỡng nhận dạng phù hợp với chữ nhỏ; đồng thời giữ tọa độ kéo đồng bộ để thao tác khoanh nhanh không bị bỏ lỡ.
+- **Frontend:** Sửa nút mở tài liệu gốc trước đây trỏ nhầm tới ô chọn Markdown và sửa luồng metadata bị đứt giữa hàng đợi chuyển đổi với bộ xuất Markdown.
+- **Frontend:** Đồng bộ nhãn phiên bản trong Sidebar từ giá trị cũ 1.2.0 lên 1.4.0 và cập nhật hướng dẫn cho PDF dài/batch thư mục.
+
 ## [1.3.2] — 2026-08-20
 
 ### Changed
@@ -17,7 +34,7 @@ Tất cả các thay đổi của dự án sẽ được cập nhật tại đâ
 
 ### Fixed
 - **Frontend:** Sửa lỗi không có nút "Mở file gốc" khi mở lại ứng dụng với file Markdown đã trích xuất — thêm nút trên toolbar hiển thị tên file PDF gốc (từ metadata `<!-- Source file: ... -->` nhúng trong Markdown) để người dùng chọn lại file PDF để trích xuất lại.
-- **Frontend/Backend:** Sửa lỗi chỉ trích xuất tối đa ~44 trang cho PDF lớn (100+ trang) — tăng timeout chuyển đổi từ 120 giây lên **10 phút** (600 giây) trong `api.ts` để xử lý PDF nhiều trang với OCR + nhận diện bảng chế độ `accurate`. Cùng tăng timeout polling job status/result từ 10s lên 30s.
+- **Frontend:** Tăng timeout tạo tác vụ từ 120 giây lên **10 phút** (600 giây), cùng timeout từng lần polling job status/result từ 10s lên 30s. Thay đổi này giúp kết nối ổn định hơn nhưng chưa xử lý lỗi native `std::bad_alloc` của PDF dài; nguyên nhân đó được sửa đầy đủ ở v1.4.0.
 
 ## [1.3.0] — 2026-08-20
 

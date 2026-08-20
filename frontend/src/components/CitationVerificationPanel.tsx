@@ -20,18 +20,18 @@ const matchBadge = (match: CitationMatch | null): { label: string; className: st
   return { label: 'Chưa chắc khớp', className: 'bg-orange-100 text-orange-700', icon: BadgeAlert };
 };
 
+const openOllamaInstaller = () => {
+  const url = 'https://ollama.com/download/windows';
+  if (window.documark?.openExternal) {
+    void window.documark.openExternal(url);
+  } else {
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
+};
+
 export const CitationVerificationPanel: React.FC<CitationVerificationPanelProps> = ({ results, onDismiss }) => {
   const [copiedCommand, setCopiedCommand] = useState<string | null>(null);
   if (results.length === 0) return null;
-
-  const openOllamaInstaller = () => {
-    const url = 'https://ollama.com/download/windows';
-    if (window.documark?.openExternal) {
-      void window.documark.openExternal(url);
-    } else {
-      window.open(url, '_blank', 'noopener,noreferrer');
-    }
-  };
 
   const copyPullCommand = async (model: string) => {
     const command = `ollama pull ${model}`;

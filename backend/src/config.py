@@ -73,6 +73,7 @@ class Settings:
     data_dir: Path
     upload_dir: Path
     output_dir: Path
+    original_dir: Path
     history_path: Path
     frontend_dist_dir: Path
     log_dir: Path
@@ -105,6 +106,7 @@ def load_settings() -> Settings:
         data_dir=data_dir,
         upload_dir=data_dir / "uploads",
         output_dir=data_dir / "outputs",
+        original_dir=data_dir / "originals",
         history_path=data_dir / "history.json",
         frontend_dist_dir=PROJECT_ROOT / "frontend" / "dist",
         log_dir=data_dir / "logs",

@@ -13,6 +13,7 @@ import {
   checkBackendHealth,
   fetchHistory,
   fetchHistoryItem,
+  fetchHistoryOriginal,
   deleteHistoryItem,
   cancelConversionJob,
   verifyCitation,
@@ -38,6 +39,22 @@ const PdfViewerBox = lazy(() =>
 // 'unreachable': health checks kept failing after the backend should have
 // had time to come up — likely crashed or was never started.
 type BackendStatus = 'connecting' | 'starting' | 'loading_models' | 'ready' | 'error' | 'unreachable';
+
+interface BatchFileContext {
+  index: number;
+  total: number;
+  fileName: string;
+}
+
+const SUPPORTED_DOCUMENT_EXTENSIONS = ['.pdf', '.docx', '.pptx', '.html'];
+
+const isSupportedDocument = (file: File): boolean => {
+  const lowerName = file.name.toLowerCase();
+  return SUPPORTED_DOCUMENT_EXTENSIONS.some(extension => lowerName.endsWith(extension));
+};
+
+const batchFileLabel = (context?: BatchFileContext): string | null =>
+  context ? `[${context.index}/${context.total}] ${context.fileName}` : null;
 
 interface BackendState {
   status: BackendStatus;
@@ -151,6 +168,7 @@ const App: React.FC = () => {
   const activeJobIdRef = useRef<string | null>(null);
   const activeUploadControllerRef = useRef<AbortController | null>(null);
   const batchCancelledRef = useRef(false);
+  const originalInputRef = useRef<HTMLInputElement>(null);
   const [previewMode, setPreviewMode] = useState<PreviewType>('edit');
   // The PDF currently shown side-by-side with the editor for region
   // extraction. Only set for .pdf uploads — non-PDF formats have nothing
@@ -183,6 +201,7 @@ const App: React.FC = () => {
   const [ocrLang, setOcrLang] = useState<OcrLang>('vi_en');
   const [tableMode, setTableMode] = useState<TableMode>('accurate');
   const [sourceFileMetadata, setSourceFileMetadata] = useState<SourceFileMetadata | null>(null);
+  const sourceHistoryJobIdRef = useRef<string | null>(null);
 
   const addToast = useCallback((type: 'success' | 'error' | 'info', message: string) => {
     dispatch({ type: 'ADD_TOAST', payload: { id: Date.now(), type, message } });
@@ -328,9 +347,10 @@ const App: React.FC = () => {
     dispatch({ type: 'SET_CONTENT', payload: newContent });
   }, []);
 
-  const syncJobState = useCallback((job: ConversionJobState, requestId: number) => {
+  const syncJobState = useCallback((job: ConversionJobState, requestId: number, batchContext?: BatchFileContext) => {
     if (activeRequestIdRef.current !== requestId) return;
     activeJobIdRef.current = job.job_id;
+    const batchLabel = batchFileLabel(batchContext);
     const statusLogs: Record<ConversionJobState['status'], string[]> = {
       queued: ['✓ Đã tải file lên an toàn.', 'Tác vụ đang chờ trong hàng đợi backend.'],
       converting: ['✓ Đã tải file lên an toàn.', '✓ Đã nhận tác vụ từ hàng đợi.', 'Docling đang phân tích tài liệu.'],
@@ -345,15 +365,15 @@ const App: React.FC = () => {
       payload: {
         isProcessing: !['complete', 'cancelled', 'error'].includes(job.status),
         stage: job.status,
-        message: job.message,
-        logs: statusLogs[job.status],
+        message: batchLabel ? `${batchLabel} — ${job.message}` : job.message,
+        logs: batchLabel ? [`Tệp trong hàng đợi: ${batchLabel}`, ...statusLogs[job.status]] : statusLogs[job.status],
         progress: job.progress,
         jobId: job.job_id,
       },
     });
   }, []);
 
-  const handleFileUpload = useCallback(async (file: File): Promise<boolean> => {
+  const handleFileUpload = useCallback(async (file: File, batchContext?: BatchFileContext): Promise<boolean> => {
     const requestId = ++activeRequestIdRef.current;
     const uploadController = new AbortController();
     activeUploadControllerRef.current = uploadController;
@@ -366,14 +386,18 @@ const App: React.FC = () => {
     setExtractionResults([]);
     setCitationResults([]);
     setTranslationResults([]);
+    sourceHistoryJobIdRef.current = null;
+    const batchLabel = batchFileLabel(batchContext);
 
     dispatch({
       type: 'SET_PROCESSING_STATE',
       payload: {
         isProcessing: true,
         stage: 'uploading',
-        message: 'Đang tải file lên backend...',
-        logs: ['Đang kiểm tra định dạng và kích thước file.'],
+        message: batchLabel ? `${batchLabel} — Đang tải file lên backend...` : 'Đang tải file lên backend...',
+        logs: batchLabel
+          ? [`Tệp trong hàng đợi: ${batchLabel}`, 'Đang kiểm tra định dạng và kích thước file.']
+          : ['Đang kiểm tra định dạng và kích thước file.'],
         error: null,
         success: false,
         uploadProgress: 0,
@@ -396,12 +420,12 @@ const App: React.FC = () => {
             type: 'SET_PROCESSING_STATE',
             payload: {
               uploadProgress: progress,
-              message: `Đang tải file lên server... ${progress}%`
+              message: `${batchLabel ? `${batchLabel} — ` : ''}Đang tải file lên server... ${progress}%`
             }
           });
         },
-        onJobCreated: job => syncJobState(job, requestId),
-        onJobStatus: job => syncJobState(job, requestId),
+        onJobCreated: job => syncJobState(job, requestId, batchContext),
+        onJobStatus: job => syncJobState(job, requestId, batchContext),
       });
 
       if (activeRequestIdRef.current !== requestId) {
@@ -412,8 +436,11 @@ const App: React.FC = () => {
 
       activeJobIdRef.current = null;
       activeUploadControllerRef.current = null;
-      const metadata = extractSourceFileMetadata(response.markdown);
+      const metadata = extractSourceFileMetadata(response.markdown) ?? {
+        originalFilename: response.original_filename,
+      };
       setSourceFileMetadata(metadata);
+      sourceHistoryJobIdRef.current = response.job_id;
       dispatch({ type: 'SET_CONTENT', payload: response.markdown });
       dispatch({
         type: 'SET_PROCESSING_STATE',
@@ -421,14 +448,14 @@ const App: React.FC = () => {
           isProcessing: false,
           stage: 'complete',
           success: true,
-          message: 'Chuyển đổi hoàn tất!',
+          message: batchLabel ? `${batchLabel} — Chuyển đổi hoàn tất!` : 'Chuyển đổi hoàn tất!',
           progress: 100,
           jobId: response.job_id,
           logs: ['✓ Chuyển đổi thành công và đã kiểm tra định dạng Markdown.']
         }
       });
 
-      addToast('success', 'Chuyển đổi văn bản thành công!');
+      if (!batchContext) addToast('success', 'Chuyển đổi văn bản thành công!');
       refreshHistory();
       return true;
     } catch (err: unknown) {
@@ -455,7 +482,7 @@ const App: React.FC = () => {
       });
       if (wasCancelled) addToast('info', 'Đã hủy tác vụ chuyển đổi.');
       else {
-        addToast('error', errorMessage);
+        addToast('error', batchContext ? `${batchContext.fileName}: ${errorMessage}` : errorMessage);
         console.error(err);
       }
       return false;
@@ -483,22 +510,42 @@ const App: React.FC = () => {
   // whichever file finished last, matching single-file upload behavior.
   const handleFilesUpload = useCallback(async (files: File[]) => {
     if (files.length === 0) return;
+    const supportedFiles = files
+      .filter(isSupportedDocument)
+      .sort((left, right) => {
+        const leftPath = left.webkitRelativePath || left.name;
+        const rightPath = right.webkitRelativePath || right.name;
+        return leftPath.localeCompare(rightPath, 'vi');
+      });
+    const ignoredCount = files.length - supportedFiles.length;
+    if (ignoredCount > 0) {
+      addToast('info', `Đã bỏ qua ${ignoredCount} tệp không được hỗ trợ.`);
+    }
+    if (supportedFiles.length === 0) {
+      addToast('error', 'Thư mục không có tệp PDF, DOCX, PPTX hoặc HTML được hỗ trợ.');
+      return;
+    }
     batchCancelledRef.current = false;
-    if (files.length === 1) {
-      await handleFileUpload(files[0]);
+    if (supportedFiles.length === 1) {
+      await handleFileUpload(supportedFiles[0]);
       return;
     }
 
-    addToast('info', `Đang xử lý hàng loạt ${files.length} file...`);
+    addToast('info', `Đã xếp hàng ${supportedFiles.length} tệp; ứng dụng sẽ xử lý tuần tự để bảo vệ bộ nhớ.`);
     let successCount = 0;
-    for (const file of files) {
+    for (let index = 0; index < supportedFiles.length; index += 1) {
       if (batchCancelledRef.current) break;
-      const ok = await handleFileUpload(file);
+      const file = supportedFiles[index];
+      const ok = await handleFileUpload(file, {
+        index: index + 1,
+        total: supportedFiles.length,
+        fileName: file.webkitRelativePath || file.name,
+      });
       if (ok) successCount++;
     }
     addToast(
-      successCount === files.length ? 'success' : 'info',
-      `${batchCancelledRef.current ? 'Đã dừng' : 'Hoàn tất'} hàng loạt: ${successCount}/${files.length} file thành công. Xem lại trong Lịch sử.`
+      successCount === supportedFiles.length ? 'success' : 'info',
+      `${batchCancelledRef.current ? 'Đã dừng' : 'Hoàn tất'} hàng loạt: ${successCount}/${supportedFiles.length} tệp thành công. Xem lại trong Lịch sử.`
     );
   }, [handleFileUpload, addToast]);
 
@@ -633,8 +680,11 @@ const App: React.FC = () => {
 
     try {
       const entry = await fetchHistoryItem(jobId);
-      const metadata = extractSourceFileMetadata(entry.markdown);
+      const metadata = extractSourceFileMetadata(entry.markdown) ?? {
+        originalFilename: entry.original_filename,
+      };
       setSourceFileMetadata(metadata);
+      sourceHistoryJobIdRef.current = jobId;
       dispatch({
         type: 'LOAD_SAVED_STATE',
         payload: {
@@ -674,6 +724,7 @@ const App: React.FC = () => {
       const text = await file.text();
       const metadata = extractSourceFileMetadata(text);
       setSourceFileMetadata(metadata);
+      sourceHistoryJobIdRef.current = null;
       dispatch({
         type: 'LOAD_SAVED_STATE',
         payload: { content: text, fileName: file.name }
@@ -685,14 +736,47 @@ const App: React.FC = () => {
     }
   }, [addToast]);
 
-  const handleOpenOriginal = useCallback(() => {
-    // Trigger the markdown file input to let user re-upload the original PDF
-    // Since the original PDF was deleted after conversion, user needs to select it again
-    const mdInput = document.querySelector('input[type="file"][accept=".md,.markdown,.txt"]') as HTMLInputElement;
-    if (mdInput) {
-      mdInput.click();
+  const restoreOriginalFile = useCallback((file: File) => {
+    if (file.name.toLowerCase().endsWith('.pdf')) {
+      setSourceFile(file);
+      addToast('success', `Đã mở lại PDF gốc: ${file.name}`);
+      return;
     }
-  }, []);
+    const url = URL.createObjectURL(file);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = file.name;
+    anchor.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    addToast('info', `Đã khôi phục ${file.name} vào thư mục tải xuống để mở bằng ứng dụng mặc định.`);
+  }, [addToast]);
+
+  const handleOriginalSelected = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    setSourceFileMetadata({ originalFilename: file.name });
+    restoreOriginalFile(file);
+  }, [restoreOriginalFile]);
+
+  const handleOpenOriginal = useCallback(async () => {
+    const sourceHistoryJobId = sourceHistoryJobIdRef.current;
+    if (sourceHistoryJobId && sourceFileMetadata) {
+      try {
+        const blob = await fetchHistoryOriginal(sourceHistoryJobId);
+        restoreOriginalFile(new File(
+          [blob],
+          sourceFileMetadata.originalFilename,
+          { type: blob.type || 'application/octet-stream' },
+        ));
+        return;
+      } catch {
+        // Entries created before v1.4.0 have no persisted source copy. Fall
+        // back to a real source-document picker instead of the old .md input.
+      }
+    }
+    originalInputRef.current?.click();
+  }, [restoreOriginalFile, sourceFileMetadata]);
 
   const resetDocument = useCallback(() => {
     // Invalidate any in-flight conversion so its eventual response can't
@@ -703,6 +787,7 @@ const App: React.FC = () => {
     activeJobIdRef.current = null;
     setSourceFile(null);
     setSourceFileMetadata(null);
+    sourceHistoryJobIdRef.current = null;
     setExtractionResults([]);
     setCitationResults([]);
     setTranslationResults([]);
@@ -767,6 +852,13 @@ const App: React.FC = () => {
 
   return (
     <div className="flex h-screen w-screen bg-neutral-100 overflow-hidden font-sans">
+      <input
+        ref={originalInputRef}
+        type="file"
+        accept=".pdf,.docx,.pptx,.html"
+        onChange={handleOriginalSelected}
+        className="hidden"
+      />
       <Sidebar
         onFilesUpload={handleFilesUpload}
         onOpenMarkdown={handleOpenMarkdown}
@@ -910,9 +1002,10 @@ const App: React.FC = () => {
               <div className="mt-4">
                 <h4 className="font-semibold text-neutral-800 mb-2">Cách sử dụng:</h4>
                 <ol className="list-decimal pl-5 space-y-2 text-sm text-neutral-600">
-                  <li>Click vào nút <strong>Chọn PDF & Chuyển đổi</strong> trên Sidebar.</li>
-                  <li>Chọn file PDF, DOCX, hoặc PPTX từ máy tính của bạn.</li>
-                  <li>Chờ đợi AI Core xử lý và bóc tách bố cục (Table, Images, Math).</li>
+                  <li>Nhấn <strong>Chọn tài liệu</strong> để chọn một hoặc nhiều tệp PDF, DOCX, PPTX hay HTML.</li>
+                  <li>Nhấn <strong>Chọn cả thư mục</strong> để xếp hàng mọi tài liệu được hỗ trợ trong thư mục và các thư mục con.</li>
+                  <li>Các tệp được xử lý tuần tự để tránh thiếu RAM; hộp tiến độ cho biết tệp hiện tại và tổng số tệp.</li>
+                  <li>PDF dài được tự chia thành các cụm trang và kiểm tra đủ trang trước khi lưu kết quả.</li>
                   <li>Nội dung Markdown sẽ hiển thị ở đây để bạn chỉnh sửa.</li>
                   <li>Click <strong>Lưu file</strong> để tải file `.md` về máy.</li>
                 </ol>

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import mimetypes
 import secrets
 import threading
 import uuid
@@ -171,6 +172,7 @@ def _require_api_token(
 job_manager = ConversionJobManager(
     converter=convert_document_to_markdown,
     output_dir=settings.output_dir,
+    original_dir=settings.original_dir,
     history_path=settings.history_path,
     max_history_entries=settings.max_history_entries,
     max_job_records=settings.max_job_records,
@@ -210,12 +212,33 @@ def _cleanup_orphaned_outputs() -> None:
             logger.warning("Failed to remove orphaned output %s: %s", candidate, exc)
 
 
+def _cleanup_orphaned_originals() -> None:
+    """Remove persisted source copies that no longer have a history entry."""
+    known_ids = {
+        str(entry.get("job_id")) for entry in history_service.list_history(settings.history_path)
+    }
+    for candidate in settings.original_dir.iterdir():
+        try:
+            if not candidate.is_file() or candidate.is_symlink():
+                continue
+            if candidate.stem not in known_ids:
+                candidate.unlink()
+        except OSError as exc:
+            logger.warning("Failed to remove orphaned original %s: %s", candidate, exc)
+
+
+def _original_path(job_id: str, original_filename: str) -> Path:
+    return settings.original_dir / f"{job_id}{Path(original_filename).suffix.lower()}"
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     settings.upload_dir.mkdir(parents=True, exist_ok=True)
     settings.output_dir.mkdir(parents=True, exist_ok=True)
+    settings.original_dir.mkdir(parents=True, exist_ok=True)
     await asyncio.to_thread(_cleanup_stale_uploads)
     await asyncio.to_thread(_cleanup_orphaned_outputs)
+    await asyncio.to_thread(_cleanup_orphaned_originals)
     await job_manager.start()
     threading.Thread(target=warm_up_models, daemon=True).start()
     try:
@@ -227,7 +250,7 @@ async def lifespan(_: FastAPI):
 app = FastAPI(
     title="Mark Tini Local API",
     description="Local document-to-Markdown conversion API",
-    version="1.3.0",
+    version="1.4.0",
     lifespan=lifespan,
 )
 
@@ -427,6 +450,27 @@ async def get_history_item(job_id: uuid.UUID) -> JSONResponse:
     return JSONResponse(content={**entry, "markdown": markdown_content})
 
 
+@secure_api.get("/history/{job_id}/original")
+async def get_history_original(job_id: uuid.UUID) -> FileResponse:
+    job_id_text = str(job_id)
+    entry = await asyncio.to_thread(
+        history_service.get_history_entry,
+        settings.history_path,
+        job_id_text,
+    )
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Không tìm thấy mục lịch sử.")
+    original_filename = str(entry.get("original_filename", ""))
+    file_path = _original_path(job_id_text, original_filename)
+    if not file_path.is_file():
+        raise HTTPException(
+            status_code=404,
+            detail="Bản cũ chưa lưu tài liệu gốc; vui lòng chọn lại file từ máy.",
+        )
+    media_type = mimetypes.guess_type(original_filename)[0] or "application/octet-stream"
+    return FileResponse(path=file_path, filename=original_filename, media_type=media_type)
+
+
 @secure_api.delete("/history/{job_id}")
 async def delete_history_item(job_id: uuid.UUID) -> dict[str, bool]:
     job_id_text = str(job_id)
@@ -441,6 +485,12 @@ async def delete_history_item(job_id: uuid.UUID) -> dict[str, bool]:
         (settings.output_dir / f"{job_id_text}.md").unlink(missing_ok=True)
     except OSError as exc:
         logger.warning("Failed to delete output for history item %s: %s", job_id_text, exc)
+    for candidate in settings.original_dir.iterdir():
+        if candidate.is_file() and not candidate.is_symlink() and candidate.stem == job_id_text:
+            try:
+                candidate.unlink()
+            except OSError as exc:
+                logger.warning("Failed to delete original for history item %s: %s", job_id_text, exc)
     return {"success": True}
 
 

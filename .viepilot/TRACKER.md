@@ -1,10 +1,10 @@
 # Theo Dõi Tiến Độ (Tracker)
 
 ## Current State
-- **Current Phase:** Phase 9 — Ollama Citation Onboarding
-- **Status:** v1.3.2 installer built and installed locally — clean-machine gate remains
-- **Version:** 1.3.2
-- **Last Updated:** 2026-08-20
+- **Current Phase:** Phase 10 — Large PDF Reliability & Document Workflow UX
+- **Status:** v1.4.0 installer built, installed and smoke-tested locally — clean-machine gate remains
+- **Version:** 1.4.0
+- **Last Updated:** 2026-08-21
 
 ## Phase Progress
 
@@ -19,6 +19,7 @@
 | 7 | SSE Real-time Streaming | ↪ Superseded | Job polling chosen for reliable upload/cancel flow |
 | 8 | Reliability, Security & True Offline Packaging | 🟡 Release Gated | Implementation/tests/installer complete; 2 manual gates remain |
 | 9 | Ollama Citation Onboarding | ✅ Complete | Tests, Electron IPC smoke and real qwen2.5:3b inference pass |
+| 10 | Large PDF Reliability & Document Workflow UX | ✅ Complete | 87 backend tests + lint/build + 4 real Electron E2E pass |
 
 ## Phase 4 Task Detail
 | Task | Description | Status |
@@ -43,3 +44,5 @@
 - **2026-08-20:** Đồng bộ phiên bản 1.3.2 và build lại installer Windows với các bản sửa lỗi của v1.3.1
 - **2026-08-21:** Hoàn tất Phase 9: tự khởi động Ollama theo yêu cầu, model mặc định `qwen2.5:3b` và onboarding rõ ràng; 81 backend tests + lint/build + 2 Electron E2E pass
 - **2026-08-21:** NSIS 1.3.2 build và cài đặt local pass; executable đã cài trả `version=1.3.2`, tiêu đề `Mark Tini`, bridge Ollama trả `started`
+- **2026-08-21:** Hoàn tất Phase 10: chặn output PDF thiếu do `partial_success`, xử lý cả thư mục, OCR vùng chuyên dụng, lưu/mở lại tài liệu gốc và panel kết quả kéo giãn; 87 backend tests + 4 Electron E2E pass
+- **2026-08-21:** NSIS 1.4.0 build/cài đặt local đạt; installer và executable đã cài đều trả version 1.4.0, smoke tiến trình phản hồi bình thường

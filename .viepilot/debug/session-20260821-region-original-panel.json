@@ -1,0 +1,55 @@
+{
+  "id": "debug-20260821-region-original-panel",
+  "status": "resolved",
+  "created_at": "2026-08-21T00:00:00+07:00",
+  "updated_at": "2026-08-21T00:00:00+07:00",
+  "problem": {
+    "description": "OCR vung PDF bo sot phan lon chu nho; sau khi mo lai app khong co tai lieu goc/nut mo; panel ket qua co chieu cao co dinh.",
+    "symptoms": [
+      "Crop co tieu de va nhieu bullet nhung output chi con tieu de va ky tu X/{.",
+      "Mo muc History khong hien nut Mo file goc.",
+      "Panel Vung da trich xuat dung max-h-64 va resize-none."
+    ],
+    "error_messages": [],
+    "affected_files": [
+      "backend/src/services/docling_service.py",
+      "backend/src/services/job_service.py",
+      "frontend/src/App.tsx",
+      "frontend/src/components/ExtractionResultsPanel.tsx"
+    ]
+  },
+  "investigation": {
+    "hypotheses": [
+      {"id": 1, "description": "Phep crop bi lech toa do canvas.", "status": "rejected"},
+      {"id": 2, "description": "Pipeline anh dung nguong OCR PDF qua cao va khong force full-page OCR.", "status": "confirmed"},
+      {"id": 3, "description": "Metadata source khong duoc ghi va nut mo bam nham input Markdown.", "status": "confirmed"},
+      {"id": 4, "description": "Panel khong co resize interaction.", "status": "confirmed"}
+    ],
+    "tests_run": [
+      {"command": "Doc ma cropBoxToBlob", "output": "Container ref boc dung canvas; toa do va devicePixelRatio duoc quy doi cung he."},
+      {"command": "Kiem tra EasyOcrOptions", "output": "force_full_page_ocr=false, confidence_threshold=0.5, bitmap_area_threshold=0.05."},
+      {"command": "Trace original_filename", "output": "convert_document_to_markdown co tham so metadata nhung JobManager chi truyen 3 tham so."},
+      {"command": "Trace handleOpenOriginal", "output": "Dang query input accept=.md,.markdown,.txt thay vi source document input."}
+    ],
+    "findings": [
+      "ImageFormatOption dang dung chung PdfPipelineOptions voi tai lieu day du, khong phu hop crop chu nho.",
+      "Upload goc bi xoa trong finally nen khong the tu khoi phuc sau restart neu khong luu ban sao.",
+      "History co original_filename nen co the gan metadata fallback ngay ca voi du lieu cu.",
+      "ExtractionResultsPanel co max-h-64/flex-shrink-0 va textarea resize-none, khong co drag handle."
+    ]
+  },
+  "resolution": {
+    "root_cause": "Cau hinh OCR anh qua chat, luong metadata/source bi dut tai JobManager, handler mo nham input, va panel duoc hard-code chieu cao.",
+    "fix_applied": "Dung EasyOCR truc tiep cho crop voi nguong chu nho va phong dai; luu source atomically theo history; them API khoi phuc source va fallback picker dung; them vertical resize handle co keyboard/localStorage.",
+    "files_changed": [
+      "backend/src/services/docling_service.py",
+      "backend/src/services/job_service.py",
+      "backend/src/main.py",
+      "frontend/src/App.tsx",
+      "frontend/src/components/PdfViewerBox.tsx",
+      "frontend/src/components/ExtractionResultsPanel.tsx",
+      "frontend/src/services/api.ts"
+    ],
+    "verification": "87 backend tests, lint/build va Electron E2E restore + real crop OCR + panel resize passed."
+  }
+}

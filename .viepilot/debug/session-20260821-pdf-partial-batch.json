@@ -1,0 +1,73 @@
+{
+  "id": "debug-20260821-pdf-partial-batch",
+  "status": "resolved",
+  "created_at": "2026-08-21T00:00:00+07:00",
+  "updated_at": "2026-08-21T00:00:00+07:00",
+  "problem": {
+    "description": "PDF bo 600 cau hoi, hon 100 trang, chi duoc trich xuat den cau 195/trang 44; giao dien khong co lua chon xu ly ca thu muc.",
+    "symptoms": [
+      "Job 2902386c-2c7b-4121-a690-1b05de77b11c duoc ghi lich su la complete.",
+      "Markdown dau ra chi co cau 1-195 thay vi 1-600.",
+      "File picker cho phep chon nhieu tep nhung khong co folder picker rieng."
+    ],
+    "error_messages": [
+      "docling.pipeline.standard_pdf_pipeline: Stage preprocess failed ... std::bad_alloc"
+    ],
+    "affected_files": [
+      "backend/src/services/docling_service.py",
+      "frontend/src/components/Sidebar.tsx",
+      "frontend/src/App.tsx"
+    ]
+  },
+  "investigation": {
+    "hypotheses": [
+      {
+        "id": 1,
+        "description": "Frontend dung polling sau timeout 10 phut.",
+        "status": "rejected"
+      },
+      {
+        "id": 2,
+        "description": "Docling co gioi han mac dinh 44/100 trang.",
+        "status": "rejected"
+      },
+      {
+        "id": 3,
+        "description": "Docling tra partial_success sau loi cap phat bo nho, nhung ung dung bo qua status va danh dau complete.",
+        "status": "confirmed"
+      }
+    ],
+    "tests_run": [
+      {
+        "command": "Loc backend.log theo job 2902386c-2c7b-4121-a690-1b05de77b11c",
+        "output": "std::bad_alloc tu trang 7 va tren nhieu trang den it nhat trang 128; job van duoc luu complete."
+      },
+      {
+        "command": "Dem cau hoi trong output Markdown cua job",
+        "output": "48777 bytes, ket thuc o Cau 195."
+      },
+      {
+        "command": "Kiem tra chu ky DocumentConverter.convert va ConversionStatus",
+        "output": "Docling 2.101.0 ho tro page_range va status partial_success; code hien tai khong kiem tra status."
+      }
+    ],
+    "findings": [
+      "Timeout frontend khong phai nguyen nhan vi polling job khong co gioi han tong va backend da tra complete.",
+      "DocumentConverter.convert co max_num_pages mac dinh rat lon, khong co gioi han 44 trang.",
+      "PdfPipelineOptions dang dung batch size 4 cho layout/OCR/table, tao dinh bo nho cao tren PDF dai.",
+      "Sidebar da co multiple file input va App xu ly tuan tu, nhung khong co webkitdirectory hay nut chon thu muc."
+    ]
+  },
+  "resolution": {
+    "root_cause": "Docling gap std::bad_alloc va tra partial_success. convert_document_to_markdown khong kiem tra ConversionResult.status, xuat phan tai lieu con lai roi job manager danh dau complete.",
+    "fix_applied": "Giam ML batch xuong 1; chia PDF toi da 8 trang, de quy tach cum partial/failure, raster-OCR trang don va tu choi output khong day du; them folder picker va batch tuan tu co tien do.",
+    "files_changed": [
+      "backend/src/services/docling_service.py",
+      "backend/tests/test_docling_service.py",
+      "frontend/src/App.tsx",
+      "frontend/src/components/Sidebar.tsx",
+      "frontend/e2e/app.spec.ts"
+    ],
+    "verification": "87 backend tests, frontend lint/build va 4 Electron E2E passed."
+  }
+}

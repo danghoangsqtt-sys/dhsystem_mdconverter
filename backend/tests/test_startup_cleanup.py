@@ -22,6 +22,7 @@ class StartupCleanupTests(unittest.TestCase):
             main.settings,
             upload_dir=temp_dir / "uploads",
             output_dir=temp_dir / "outputs",
+            original_dir=temp_dir / "originals",
             history_path=temp_dir / "history.json",
         )
 
@@ -84,6 +85,23 @@ class StartupCleanupTests(unittest.TestCase):
                 main._cleanup_orphaned_outputs()
 
             self.assertEqual(list(test_settings.output_dir.glob("*.md")), [])
+
+    def test_cleanup_orphaned_originals_keeps_only_history_sources(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_temp_dir:
+            temp_dir = Path(raw_temp_dir)
+            test_settings = self._patched_settings(temp_dir)
+            test_settings.original_dir.mkdir(parents=True)
+            history_service.append_history(
+                test_settings.history_path, "kept-job", "kept.pdf", "en", "fast", 200
+            )
+            (test_settings.original_dir / "kept-job.pdf").write_bytes(b"kept")
+            (test_settings.original_dir / "orphan-job.docx").write_bytes(b"orphan")
+
+            with patch.object(main, "settings", test_settings):
+                main._cleanup_orphaned_originals()
+
+            self.assertTrue((test_settings.original_dir / "kept-job.pdf").is_file())
+            self.assertFalse((test_settings.original_dir / "orphan-job.docx").exists())
 
 
 if __name__ == "__main__":

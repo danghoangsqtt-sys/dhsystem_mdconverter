@@ -34,6 +34,12 @@ Backend kiểm tra extension, magic bytes, kích thước, UUID, token
         ↓
 Docling xử lý file PDF/DOCX/PPTX/HTML/ảnh
         ↓
+PDF được chia cụm tối đa 8 trang; cụm partial/failure tự chia nhỏ
+        ↓
+Trang đơn lỗi được raster hóa có giới hạn kích thước và OCR lại
+        ↓
+Kiểm tra ConversionStatus + đủ số trang (không chấp nhận partial_success)
+        ↓
 Markdown output được lưu atomically vào thư mục outputs
         ↓
 History/metadata được ghi lại

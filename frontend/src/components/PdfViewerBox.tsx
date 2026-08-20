@@ -38,13 +38,14 @@ export const PdfViewerBox: React.FC<PdfViewerBoxProps> = ({ file, onExtractRegio
   const [scale, setScale] = useState(1.0);
 
   const [boxes, setBoxes] = useState<BoundingBox[]>([]);
-  const [isDrawing, setIsDrawing] = useState(false);
-  const [startPos, setStartPos] = useState({ x: 0, y: 0 });
   const [currentBox, setCurrentBox] = useState<{x: number, y: number, w: number, h: number} | null>(null);
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractAllProgress, setExtractAllProgress] = useState<{ current: number; total: number } | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const isDrawingRef = useRef(false);
+  const startPosRef = useRef({ x: 0, y: 0 });
+  const currentBoxRef = useRef<{x: number, y: number, w: number, h: number} | null>(null);
 
   // Tracks which page is actually painted on the canvas right now, and lets
   // async code await a specific page becoming current. A ref (not state) so
@@ -85,41 +86,45 @@ export const PdfViewerBox: React.FC<PdfViewerBoxProps> = ({ file, onExtractRegio
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
-    setIsDrawing(true);
-    setStartPos({ x, y });
-    setCurrentBox({ x, y, w: 0, h: 0 });
+    isDrawingRef.current = true;
+    startPosRef.current = { x, y };
+    currentBoxRef.current = { x, y, w: 0, h: 0 };
+    setCurrentBox(currentBoxRef.current);
   };
 
   const handleMouseMove = (e: MouseEvent<HTMLDivElement>) => {
-    if (!isDrawing || !containerRef.current) return;
+    if (!isDrawingRef.current || !containerRef.current) return;
 
     const rect = containerRef.current.getBoundingClientRect();
     const currentX = e.clientX - rect.left;
     const currentY = e.clientY - rect.top;
 
-    const x = Math.min(startPos.x, currentX);
-    const y = Math.min(startPos.y, currentY);
-    const w = Math.abs(currentX - startPos.x);
-    const h = Math.abs(currentY - startPos.y);
+    const x = Math.min(startPosRef.current.x, currentX);
+    const y = Math.min(startPosRef.current.y, currentY);
+    const w = Math.abs(currentX - startPosRef.current.x);
+    const h = Math.abs(currentY - startPosRef.current.y);
 
-    setCurrentBox({ x, y, w, h });
+    currentBoxRef.current = { x, y, w, h };
+    setCurrentBox(currentBoxRef.current);
   };
 
   const handleMouseUp = () => {
-    if (!isDrawing) return;
-    setIsDrawing(false);
+    if (!isDrawingRef.current) return;
+    isDrawingRef.current = false;
 
-    if (currentBox && currentBox.w > 10 && currentBox.h > 10) {
+    const completedBox = currentBoxRef.current;
+    if (completedBox && completedBox.w > 10 && completedBox.h > 10) {
       const newBox: BoundingBox = {
         id: Date.now().toString(),
-        x: currentBox.x / scale,
-        y: currentBox.y / scale,
-        width: currentBox.w / scale,
-        height: currentBox.h / scale,
+        x: completedBox.x / scale,
+        y: completedBox.y / scale,
+        width: completedBox.w / scale,
+        height: completedBox.h / scale,
         page: pageNumber
       };
       setBoxes(prev => [...prev, newBox]);
     }
+    currentBoxRef.current = null;
     setCurrentBox(null);
   };
 
@@ -267,6 +272,7 @@ export const PdfViewerBox: React.FC<PdfViewerBoxProps> = ({ file, onExtractRegio
       <div className="flex-1 overflow-auto relative flex justify-center bg-gray-50 p-4 cursor-crosshair">
         <div
           ref={containerRef}
+          data-testid="pdf-selection-surface"
           className="relative shadow-md rounded-sm overflow-hidden h-fit"
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}

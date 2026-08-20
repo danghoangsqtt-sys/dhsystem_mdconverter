@@ -1,4 +1,5 @@
 import path from 'node:path';
+import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { test, expect, _electron as electron, type ElectronApplication, type Page } from '@playwright/test';
 
@@ -44,20 +45,86 @@ test.describe.serial('Mark Tini desktop app', () => {
     // Either state is fine here - this test only asserts the renderer
     // mounted correctly, not that the backend has finished starting yet.
     await expect(
-      page.getByRole('button', { name: /Chọn PDF & Chuyển đổi|Đang khởi động/ })
+      page.getByRole('button', { name: /Chọn tài liệu|Đang khởi động/ })
     ).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Chọn cả thư mục' })).toBeVisible();
+    await expect(page.locator('input[type="file"][webkitdirectory]')).toHaveCount(1);
   });
 
   test('converts a real PDF and shows the extracted text in the editor', async () => {
-    const uploadButton = page.getByRole('button', { name: 'Chọn PDF & Chuyển đổi' });
+    const uploadButton = page.getByRole('button', { name: 'Chọn tài liệu' });
     // Generous timeout: covers real backend startup plus Docling model
     // warm-up (warm_up_models), which the renderer waits out via its own
     // /api/health poll rather than a fixed delay.
     await expect(uploadButton).toBeEnabled({ timeout: 120_000 });
 
-    const fileInput = page.locator('input[type="file"][accept*=".pdf"]');
+    const fileInput = page.locator('input[type="file"][multiple]:not([webkitdirectory])');
     await fileInput.setInputFiles(SAMPLE_PDF);
 
     await expect(page.locator('#root')).toContainText('Mark Tini E2E Fixture', { timeout: 60_000 });
+  });
+
+  test('restores the original PDF, extracts the full crop, and resizes the result panel', async () => {
+    await page.getByText('sample.pdf', { exact: true }).first().click();
+    await expect(page.getByText('Tài liệu gốc', { exact: true })).toHaveCount(0);
+
+    const openOriginal = page.getByRole('button', { name: /Mở tài liệu gốc/ });
+    await expect(openOriginal).toBeVisible();
+    await openOriginal.click();
+    await expect(page.getByText('Tài liệu gốc', { exact: true })).toBeVisible({ timeout: 30_000 });
+
+    const canvas = page.locator('.react-pdf__Page canvas').first();
+    await expect(canvas).toBeVisible({ timeout: 30_000 });
+    const selectionSurface = page.getByTestId('pdf-selection-surface');
+    const surfaceBox = await selectionSurface.boundingBox();
+    expect(surfaceBox).not.toBeNull();
+    if (!surfaceBox) return;
+    const start = { clientX: surfaceBox.x + 4, clientY: surfaceBox.y + 4 };
+    const end = {
+      clientX: surfaceBox.x + surfaceBox.width - 4,
+      clientY: surfaceBox.y + surfaceBox.height - 4,
+    };
+    await selectionSurface.dispatchEvent('mousedown', { ...start, button: 0 });
+    await selectionSurface.dispatchEvent('mousemove', { ...end, button: 0 });
+    await selectionSurface.dispatchEvent('mouseup', { ...end, button: 0 });
+    await page.getByRole('button', { name: 'Trích xuất trang này (1)' }).click();
+
+    const extractedText = page.locator('textarea[placeholder="Không nhận diện được văn bản..."]').first();
+    await expect(extractedText).toHaveValue(/Mark Tini/i, { timeout: 120_000 });
+
+    const resizeHandle = page.getByRole('separator', {
+      name: 'Kéo để thay đổi chiều cao vùng đã trích xuất',
+    });
+    const panel = resizeHandle.locator('..');
+    const before = await panel.boundingBox();
+    const handleBox = await resizeHandle.boundingBox();
+    expect(before).not.toBeNull();
+    expect(handleBox).not.toBeNull();
+    if (!before || !handleBox) return;
+    await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y - 80);
+    await page.mouse.up();
+    const after = await panel.boundingBox();
+    expect(after?.height ?? 0).toBeGreaterThan(before.height + 40);
+  });
+
+  test('queues multiple selected documents and keeps both results in history', async () => {
+    const uploadButton = page.getByRole('button', { name: 'Chọn tài liệu' });
+    await expect(uploadButton).toBeEnabled({ timeout: 30_000 });
+
+    const sampleBuffer = fs.readFileSync(SAMPLE_PDF);
+    const suffix = Date.now();
+    const firstName = `batch-a-${suffix}.pdf`;
+    const secondName = `batch-b-${suffix}.pdf`;
+    const fileInput = page.locator('input[type="file"][multiple]:not([webkitdirectory])');
+    await fileInput.setInputFiles([
+      { name: firstName, mimeType: 'application/pdf', buffer: sampleBuffer },
+      { name: secondName, mimeType: 'application/pdf', buffer: sampleBuffer },
+    ]);
+
+    await expect(page.getByText(firstName).first()).toBeVisible({ timeout: 120_000 });
+    await expect(page.getByText(secondName).first()).toBeVisible({ timeout: 120_000 });
+    await expect(uploadButton).toBeEnabled({ timeout: 30_000 });
   });
 });

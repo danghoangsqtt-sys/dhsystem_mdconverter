@@ -181,11 +181,11 @@ const Toolbar: React.FC<ToolbarProps> = ({
         {sourceFileMetadata && (
           <button
             onClick={onOpenOriginal}
-            title={`Mở lại file gốc: ${sourceFileMetadata.originalFilename}`}
+            title={`Mở lại tài liệu gốc: ${sourceFileMetadata.originalFilename}`}
             className="flex items-center space-x-2 px-3 py-1.5 rounded-md text-[13px] font-medium transition-colors border bg-white hover:bg-gray-50 text-gray-700 border-gray-200 shadow-sm"
           >
             <Upload size={14} />
-            <span>Mở file gốc ({sourceFileMetadata.originalFilename})</span>
+            <span>Mở tài liệu gốc ({sourceFileMetadata.originalFilename})</span>
           </button>
         )}
 

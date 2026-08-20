@@ -5,7 +5,7 @@
   
   **🚀 Chuyển đổi tài liệu sang Markdown — Hoàn toàn ngoại tuyến, chạy cục bộ trên Windows**
 
-  [![Version](https://img.shields.io/badge/version-1.3.2-58A6FF?style=for-the-badge)](CHANGELOG.md)
+  [![Version](https://img.shields.io/badge/version-1.4.0-58A6FF?style=for-the-badge)](CHANGELOG.md)
   [![License](https://img.shields.io/badge/license-MIT-3FB950?style=for-the-badge)](LICENSE)
   [![Platform](https://img.shields.io/badge/platform-Windows-0078D4?style=for-the-badge&logo=windows&logoColor=white)](README.md)
   [![Made with](https://img.shields.io/badge/made%20with-Electron%20%7C%20React-black?style=for-the-badge&logo=electron&logoColor=white)](frontend/package.json)
@@ -57,7 +57,9 @@ Từ phiên bản **v1.2.0** trở lên, Mark Tini sử dụng:
 | 🔄 **Dịch đoạn Anh ↔ Việt** | Dịch offline bằng model NMT cục bộ, hỗ trợ thuật ngữ chuyên ngành |
 | 🔍 **Xác minh trích dẫn** | Tra nguồn qua OpenAlex (online) và đánh giá tham khảo bằng Ollama `qwen2.5:3b` (local, tùy chọn) |
 | 📝 **Soạn thảo tích hợp** | Editor Markdown WYSIWYG, lưu tự động vào IndexedDB |
-| 📋 **Lịch sử chuyển đổi** | Giữ lại kết quả cũ, dễ dàng truy xuất hoặc xóa |
+| 📋 **Lịch sử chuyển đổi** | Giữ kết quả và bản tài liệu gốc để mở lại sau khi khởi động ứng dụng |
+| 📂 **Batch theo thư mục** | Chọn cả thư mục, tự lọc định dạng hỗ trợ và xử lý tuần tự an toàn bộ nhớ |
+| 📚 **PDF dài đáng tin cậy** | Chia cụm trang, tự cứu trang lỗi và chỉ lưu khi đã kiểm tra đủ trang |
 | 🛡️ **Bảo mật & Riêng tư** | Chạy 100% cục bộ, token API per-session, giới hạn upload 100 MB |
 | 🔌 **Offline-first** | Model Docling/EasyOCR/dịch được đóng gói, không cần mạng cho conversion |
 
@@ -113,7 +115,7 @@ Thiết kế chi tiết và các invariant nằm tại [ARCHITECTURE.md](.viepil
 
 ## Tài liệu phiên bản hiện tại
 
-Phiên bản hoàn thiện hiện tại: 1.3.2.
+Phiên bản hoàn thiện hiện tại: 1.4.0.
 
 - [Báo cáo kỹ thuật v1.3.0](docs/bao-cao-ky-thuat-v1.3.0.md)
 - [Hướng dẫn sử dụng v1.3.0](docs/huong-dan-su-dung-v1.3.0.md)
@@ -122,13 +124,13 @@ Phiên bản hoàn thiện hiện tại: 1.3.2.
 
 ## Trạng thái phát hành
 
-v1.3.2 là bản vá đóng gói lại các sửa lỗi mới nhất: khôi phục thao tác mở file PDF gốc từ Markdown đã lưu và tăng timeout để xử lý PDF lớn trên 100 trang. Phiên bản này kế thừa toàn bộ cải tiến của v1.3.0 về OCR vùng PDF, giao diện dịch, sidebar, IndexedDB, offline model bundle và kiểm soát queue backend.
+v1.4.0 sửa lỗi PDF dài bị lưu thiếu nội dung khi Docling hết bộ nhớ, đồng thời bổ sung xử lý hàng loạt bằng cách chọn cả thư mục. PDF được chia thành cụm trang nhỏ, cụm lỗi tự chia tiếp và trang lỗi được OCR lại ở kích thước an toàn; ứng dụng chỉ lưu kết quả khi đã kiểm tra đủ trang.
 
 ## 🚀 Cài đặt và sử dụng
 
 ### Cài đặt (Người dùng cuối)
 
-1. **Nhận installer**: Chép file `Mark Tini Setup 1.3.2.exe` từ USB hoặc kênh lưu trữ nội bộ do DHSystem cung cấp
+1. **Nhận installer**: Chép file `Mark Tini Setup 1.4.0.exe` từ USB hoặc kênh lưu trữ nội bộ do DHSystem cung cấp
 2. **Chạy installer**: Double-click file `.exe`, làm theo hướng dẫn
 3. **Khởi chạy**: Mở ứng dụng từ Desktop hoặc Start Menu
 4. **Lần đầu**: Chờ 10-60 giây để nạp model AI (tuỳ thuộc cấu hình máy)
@@ -152,8 +154,8 @@ Xem [**📖 Hướng dẫn sử dụng đầy đủ v1.3.0**](docs/huong-dan-su-
 **Quick start** — 5 bước cơ bản:
 
 1. Mở ứng dụng
-2. Ở Sidebar trái, chọn **"Chọn PDF & Chuyển đổi"**
-3. Chọn file (PDF/DOCX/PPTX/HTML/ảnh)
+2. Ở Sidebar trái, chọn **"Chọn tài liệu"** hoặc **"Chọn cả thư mục"**
+3. Chọn một/nhiều file, hoặc chọn thư mục chứa PDF/DOCX/PPTX/HTML
 4. Chọn ngôn ngữ OCR và chế độ nhận dạng bảng
 5. Chờ xong, chỉnh sửa Markdown trong editor, rồi lưu/copy kết quả
 
@@ -195,7 +197,7 @@ Quy trình build tự động:
 1. Tạo runtime Python embeddable nếu chưa có
 2. Tải model Docling/EasyOCR/translation vào `offline_models/`
 3. Validate dependency lock (`requirements.lock.txt`)
-4. Build NSIS installer → `frontend/release/Mark Tini Setup 1.3.2.exe`
+4. Build NSIS installer → `frontend/release/Mark Tini Setup 1.4.0.exe`
 
 ---
 
@@ -303,11 +305,13 @@ Kiểm tra:
 
 ## 📊 Trạng thái phát hành
 
-### Phiên bản hiện tại: **v1.3.2** (2026-08-20)
+### Phiên bản hiện tại: **v1.4.0** (2026-08-21)
 
 **Cải tiến chính:**
-- ✅ Khôi phục thao tác mở lại file PDF gốc từ Markdown đã lưu
-- ✅ Tăng timeout chuyển đổi cho PDF lớn trên 100 trang
+- ✅ Sửa lỗi PDF 128+ trang bị lưu thiếu do `std::bad_alloc`/`partial_success`
+- ✅ Chọn cả thư mục và xử lý nhiều tài liệu theo hàng đợi an toàn bộ nhớ
+- ✅ Khôi phục PDF gốc trực tiếp từ lịch sử sau khi mở lại ứng dụng
+- ✅ OCR vùng khoanh chữ nhỏ chính xác hơn và bảng kết quả kéo cao/thấp tự do
 - ✅ Sửa lỗi trích xuất vùng PDF trả về placeholder
 - ✅ Đơn giản hoá UI panel dịch
 - ✅ Thêm sidebar thu gọn/kéo giãn
