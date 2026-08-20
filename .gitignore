@@ -4,6 +4,10 @@ frontend/dist-electron/
 frontend/release/
 dist-electron/
 
+# Playwright e2e test artifacts (screenshots, traces, error contexts)
+frontend/test-results/
+frontend/playwright-report/
+
 # Dependencies
 node_modules/
 
@@ -17,9 +21,10 @@ python_runtime/
 offline_models/
 .env
 
-# Runtime data: uploaded source files, generated markdown output, and
-# conversion history. Created automatically by the backend on startup
-# (see main.py); never meant to be committed.
+# Runtime data: uploaded source files, generated markdown output,
+# conversion history, and rotated log files. Created automatically by the
+# backend on startup (see main.py); never meant to be committed.
 data/uploads/
 data/outputs/
 data/history.json
+data/logs/

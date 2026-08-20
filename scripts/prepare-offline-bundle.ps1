@@ -12,7 +12,7 @@ $runtimeDir = Join-Path $projectRoot 'python_runtime'
 $pythonExe = Join-Path $runtimeDir 'python.exe'
 $modelsDir = Join-Path $projectRoot 'offline_models'
 $translationDir = Join-Path $modelsDir 'translation'
-$requirements = Join-Path $projectRoot 'backend\requirements.txt'
+$requirementsLock = Join-Path $projectRoot 'backend\requirements.lock.txt'
 
 function Invoke-CheckedPython {
     param([string[]]$Arguments)
@@ -52,8 +52,11 @@ if (-not (Test-Path -LiteralPath $pythonExe -PathType Leaf)) {
 }
 
 if (-not $ValidateOnly) {
-    Write-Host 'Installing pinned backend dependencies into the portable runtime...'
-    Invoke-CheckedPython @('-s', '-m', 'pip', 'install', '--disable-pip-version-check', '-r', $requirements)
+    if (-not (Test-Path -LiteralPath $requirementsLock -PathType Leaf)) {
+        throw "Hash-locked requirements file is missing: $requirementsLock. Run scripts\lock-requirements.ps1 first."
+    }
+    Write-Host 'Installing hash-locked backend dependencies into the portable runtime...'
+    Invoke-CheckedPython @('-s', '-m', 'pip', 'install', '--disable-pip-version-check', '--require-hashes', '-r', $requirementsLock)
     New-Item -ItemType Directory -Path $modelsDir -Force | Out-Null
     Write-Host 'Downloading the exact Docling and EasyOCR artifacts used by the application...'
     Invoke-CheckedPython @(
@@ -83,7 +86,7 @@ $env:PYTHONNOUSERSITE = '1'
 $env:PYTHONPATH = $projectRoot
 Invoke-CheckedPython @(
     '-s', '-c',
-    "import sys; assert sys.prefix == sys.base_prefix; import asyncio, fastapi, uvicorn, docling, easyocr; from backend.src.services.docling_service import get_converter; get_converter(); from backend.src.services.translation_service import translate_to_vietnamese; result = asyncio.run(translate_to_vietnamese('The energy of a photon is given by the formula `$E=hf`$, where h is the Planck constant.')); assert result.strip(); assert '`$E=hf`$' in result, f'formula not preserved verbatim: {result!r}'; print('offline-runtime-ok')"
+    "import sys; assert sys.prefix == sys.base_prefix; import asyncio, fastapi, uvicorn, docling, easyocr; from backend.src.services.docling_service import get_converter; get_converter(); from backend.src.services.translation_service import translate_text; result = asyncio.run(translate_text('The energy of a photon is given by the formula `$E=hf`$, where h is the Planck constant.')); assert result.strip(); assert '`$E=hf`$' in result, f'formula not preserved verbatim: {result!r}'; print('offline-runtime-ok')"
 )
 
 if ($SmokeDocument) {

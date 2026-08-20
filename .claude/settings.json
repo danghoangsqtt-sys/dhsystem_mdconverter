@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"import docling; print\\(docling.__version__\\)\")",
+      "Bash(docling-env/Scripts/python -c \"import docling; print\\(docling.__version__\\)\")",
+      "Bash(docling-env/Scripts/python -c ' *)",
+      "Bash(\"e:\\\\data\\\\2.MyProject\\\\2026\\\\markdown_convert\\\\docling-env\\\\Scripts\\\\python.exe\" run_server.py)",
+      "Bash(echo \"Server started, PID: $!\")",
+      "Bash(taskkill /F /IM \"python.exe\" /FI \"WINDOWTITLE eq *uvicorn*\")",
+      "Bash(netstat -ano)"
+    ]
+  }
+}

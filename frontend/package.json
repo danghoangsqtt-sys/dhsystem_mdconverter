@@ -1,10 +1,10 @@
 {
-  "name": "documark-ai",
+  "name": "mark-tini",
   "private": true,
-  "version": "1.2.0",
+  "version": "1.3.0",
   "type": "module",
-  "main": "dist-electron/main.js",
-  "description": "DocuMark AI - Offline PDF to Markdown Converter",
+  "main": "dist-electron/main.cjs",
+  "description": "Mark Tini - Offline PDF to Markdown Converter",
   "author": "DHSystem",
   "scripts": {
     "dev": "vite",
@@ -12,6 +12,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "dev:electron": "vite",
+    "test:e2e": "npm run build && playwright test",
     "prepare:offline": "powershell -NoProfile -ExecutionPolicy Bypass -File ../scripts/prepare-offline-bundle.ps1",
     "validate:offline": "powershell -NoProfile -ExecutionPolicy Bypass -File ../scripts/prepare-offline-bundle.ps1 -ValidateOnly",
     "build:electron": "npm run prepare:offline && tsc -b && vite build && electron-builder"
@@ -22,8 +23,9 @@
       "owner": "danghoangsqtt-sys",
       "repo": "dhsystem_mdconverter"
     },
-    "appId": "com.dhsystem.documark-ai",
-    "productName": "DocuMark AI",
+    "appId": "com.dhsystem.marktini",
+    "productName": "Mark Tini",
+    "copyright": "Copyright © 2026 DHSystem",
     "asar": true,
     "win": {
       "target": [
@@ -83,6 +85,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.62.1",
     "@types/node": "^24.12.3",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",

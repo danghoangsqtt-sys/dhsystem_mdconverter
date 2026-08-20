@@ -5,6 +5,7 @@ import logging
 import secrets
 import threading
 import uuid
+import zipfile
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import BinaryIO
@@ -27,6 +28,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from .config import settings
+from .logging_utils import CorrelationIdMiddleware, configure_logging
 from .services import citation_service, history_service, translation_service
 from .services.docling_service import (
     DEFAULT_OCR_LANG,
@@ -44,7 +46,7 @@ from .services.job_service import (
 )
 
 
-logging.basicConfig(level=logging.INFO)
+configure_logging(settings.log_dir, level=settings.log_level)
 logger = logging.getLogger(__name__)
 
 API_TOKEN_HEADER = "X-DocuMark-Token"
@@ -62,10 +64,66 @@ SUPPORTED_EXTENSIONS = {
     ".bmp",
 }
 UPLOAD_CHUNK_SIZE = 1024 * 1024
+CONTENT_SNIFF_BYTES = 512
+# Signature bytes for formats detectable by file header alone.
+_MAGIC_SIGNATURES: dict[str, tuple[bytes, ...]] = {
+    ".pdf": (b"%PDF-",),
+    ".png": (b"\x89PNG\r\n\x1a\n",),
+    ".jpg": (b"\xff\xd8\xff",),
+    ".jpeg": (b"\xff\xd8\xff",),
+    ".tif": (b"II*\x00", b"MM\x00*"),
+    ".tiff": (b"II*\x00", b"MM\x00*"),
+    ".bmp": (b"BM",),
+}
+# docx/pptx share the OOXML zip container, so a header check alone can't tell
+# them apart from each other (or from a plain zip) - the required member path
+# below distinguishes the actual document type inside the archive.
+_OOXML_REQUIRED_MEMBER: dict[str, str] = {
+    ".docx": "word/document.xml",
+    ".pptx": "ppt/presentation.xml",
+}
+_TEXT_EXTENSIONS = {".html", ".htm"}
 
 
 class UploadTooLargeError(ValueError):
     pass
+
+
+class UploadContentMismatchError(ValueError):
+    pass
+
+
+def _validate_uploaded_content(path: Path, extension: str) -> None:
+    """Confirm the file's actual bytes match its claimed extension.
+
+    `_safe_original_filename` only checks the filename string, which a
+    mislabeled or malicious upload can trivially spoof; this inspects the
+    bytes actually written to disk before they reach Docling.
+    """
+    signatures = _MAGIC_SIGNATURES.get(extension)
+    if signatures is not None:
+        with open(path, "rb") as handle:
+            header = handle.read(CONTENT_SNIFF_BYTES)
+        if not any(header.startswith(sig) for sig in signatures):
+            raise UploadContentMismatchError(extension)
+        return
+
+    required_member = _OOXML_REQUIRED_MEMBER.get(extension)
+    if required_member is not None:
+        try:
+            with zipfile.ZipFile(path) as archive:
+                if required_member not in archive.namelist():
+                    raise UploadContentMismatchError(extension)
+        except zipfile.BadZipFile as exc:
+            raise UploadContentMismatchError(extension) from exc
+        return
+
+    if extension in _TEXT_EXTENSIONS:
+        with open(path, "rb") as handle:
+            header = handle.read(CONTENT_SNIFF_BYTES)
+        if b"\x00" in header:
+            raise UploadContentMismatchError(extension)
+        return
 
 
 def _safe_original_filename(filename: str | None) -> tuple[str, str]:
@@ -129,11 +187,35 @@ def _cleanup_stale_uploads() -> None:
             logger.warning("Failed to remove stale upload %s: %s", candidate, exc)
 
 
+def _cleanup_orphaned_outputs() -> None:
+    """Remove output Markdown left by a run that crashed between writing the
+    file and recording its history entry (or mid atomic-write, as a leftover
+    `*.tmp-*` file - see `_atomic_write_text`). Every output file reachable
+    through the API has a matching history entry (append_history writes both
+    together, and delete_history_item/eviction remove both together); a
+    startup gap between the two is the only way one can exist without the
+    other, and it would otherwise sit on disk forever with no way for a user
+    to ever see or remove it.
+    """
+    known_ids = {
+        str(entry.get("job_id")) for entry in history_service.list_history(settings.history_path)
+    }
+    for candidate in settings.output_dir.iterdir():
+        try:
+            if not candidate.is_file() or candidate.is_symlink():
+                continue
+            if candidate.stem not in known_ids:
+                candidate.unlink()
+        except OSError as exc:
+            logger.warning("Failed to remove orphaned output %s: %s", candidate, exc)
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     settings.upload_dir.mkdir(parents=True, exist_ok=True)
     settings.output_dir.mkdir(parents=True, exist_ok=True)
     await asyncio.to_thread(_cleanup_stale_uploads)
+    await asyncio.to_thread(_cleanup_orphaned_outputs)
     await job_manager.start()
     threading.Thread(target=warm_up_models, daemon=True).start()
     try:
@@ -143,9 +225,9 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(
-    title="DocuMark AI Local API",
+    title="Mark Tini Local API",
     description="Local document-to-Markdown conversion API",
-    version="1.2.0",
+    version="1.3.0",
     lifespan=lifespan,
 )
 
@@ -156,6 +238,10 @@ app.add_middleware(
     allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", API_TOKEN_HEADER],
 )
+# Added after CORSMiddleware so it ends up wrapping CORS (Starlette's
+# add_middleware stacks newest-outermost) - every request, including
+# CORS-rejected ones, still gets a correlation ID and a logged summary line.
+app.add_middleware(CorrelationIdMiddleware)
 
 secure_api = APIRouter(prefix="/api", dependencies=[Depends(_require_api_token)])
 
@@ -168,7 +254,7 @@ if not settings.frontend_dist_dir.is_dir():
     # reachable at "/" even once `frontend_dist_dir` exists.
     @app.get("/")
     def read_root() -> dict[str, str]:
-        return {"message": "DocuMark AI Local API"}
+        return {"message": "Mark Tini Local API"}
 
 
 @app.get("/api/session")
@@ -211,6 +297,15 @@ async def _create_conversion_job(
         raise HTTPException(status_code=500, detail="Không thể lưu file tải lên.") from exc
     finally:
         await file.close()
+
+    try:
+        await asyncio.to_thread(_validate_uploaded_content, upload_path, extension)
+    except UploadContentMismatchError as exc:
+        upload_path.unlink(missing_ok=True)
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail=f"Nội dung file không khớp với định dạng {extension}.",
+        ) from exc
 
     try:
         return await job_manager.submit(
@@ -382,25 +477,43 @@ async def verify_citation(payload: VerifyCitationRequest) -> dict[str, object]:
 
 class TranslateRequest(BaseModel):
     text: str
+    direction: str = translation_service.DIRECTION_EN_VI
+    domain: str | None = None
 
 
 @secure_api.post("/translate")
 async def translate_text(payload: TranslateRequest) -> dict[str, object]:
-    """Translates a selected passage from English to Vietnamese using a local
-    NMT model. Unlike verify-citation, this never needs internet access once
-    the model is loaded/bundled — consistent with the app's offline-first
-    conversion flow."""
+    """Translates a selected passage between English and Vietnamese using a
+    local NMT model. Unlike verify-citation, this never needs internet
+    access once the model is loaded/bundled — consistent with the app's
+    offline-first conversion flow.
+
+    `domain`, if recognized, forces domain-specific terminology (see
+    `translation_glossaries.py`) instead of leaving it to the model's
+    generic rendering; an unrecognized/omitted domain just skips that step.
+    """
     text = payload.text.strip()
     if not text:
         raise HTTPException(status_code=400, detail="Không có nội dung để dịch.")
 
     try:
-        translated = await translation_service.translate_to_vietnamese(text)
+        translated = await translation_service.translate_text(
+            text,
+            direction=payload.direction,
+            domain=payload.domain,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Chiều dịch không hợp lệ.") from exc
     except Exception as exc:
         logger.exception("Translation failed")
         raise HTTPException(status_code=500, detail="Không thể dịch nội dung. Vui lòng thử lại.") from exc
 
-    return {"original_text": text, "translated_text": translated}
+    return {
+        "original_text": text,
+        "translated_text": translated,
+        "direction": payload.direction,
+        "domain": payload.domain,
+    }
 
 
 app.include_router(secure_api)

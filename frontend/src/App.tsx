@@ -1,12 +1,10 @@
-import React, { useEffect, useCallback, useReducer, useRef, useState } from 'react';
-import MDEditor from '@uiw/react-md-editor';
+import React, { useEffect, useCallback, useReducer, useRef, useState, Suspense, lazy } from 'react';
 import type { PreviewType } from '@uiw/react-md-editor';
 import { Agentation } from 'agentation';
 import Sidebar from './components/Sidebar';
 import Toolbar from './components/Toolbar';
 import Toast from './components/Toast';
 import ProcessingStatus from './components/ProcessingStatus';
-import { PdfViewerBox } from './components/PdfViewerBox';
 import { ExtractionResultsPanel } from './components/ExtractionResultsPanel';
 import { CitationVerificationPanel } from './components/CitationVerificationPanel';
 import { TranslationPanel } from './components/TranslationPanel';
@@ -21,12 +19,18 @@ import {
   translateText,
   ConversionCancelledError,
 } from './services/api';
-import type { OcrLang, TableMode, HistoryEntry, ConversionJobState } from './services/api';
+import type { OcrLang, TableMode, HistoryEntry, ConversionJobState, TranslationDirection, TranslationDomain } from './services/api';
+import { loadAutosave, saveAutosave } from './services/autosaveDb';
 import type { ProcessingState, ToastMessage, ExtractionResult, CitationVerificationEntry, TranslationEntry } from './types';
 import { AlertTriangle, X } from 'lucide-react';
 
-const STORAGE_KEY_CONTENT = 'documark_autosave_content';
-const STORAGE_KEY_FILENAME = 'documark_autosave_filename';
+// Both pull in heavy libraries (CodeMirror, pdf.js) that don't need to block
+// the initial render - MDEditor is always shown but can pop in a beat after
+// the shell, and PdfViewerBox is only ever mounted once a PDF is loaded.
+const MDEditor = lazy(() => import('@uiw/react-md-editor'));
+const PdfViewerBox = lazy(() =>
+  import('./components/PdfViewerBox').then((mod) => ({ default: mod.PdfViewerBox }))
+);
 
 // 'connecting': no successful /api/health response yet (backend process may
 // still be starting up, or Electron hasn't spawned it yet in this instant).
@@ -161,10 +165,12 @@ const App: React.FC = () => {
   // extractionResults — cleared whenever the document itself changes.
   const [citationResults, setCitationResults] = useState<CitationVerificationEntry[]>([]);
   const [isVerifyingCitation, setIsVerifyingCitation] = useState(false);
-  // Selection-based EN->VI translations, same ephemeral lifecycle and
-  // hasSelection gating as citationResults above.
+  // Selection-based translations, same ephemeral lifecycle and hasSelection
+  // gating as citationResults above.
   const [translationResults, setTranslationResults] = useState<TranslationEntry[]>([]);
   const [isTranslating, setIsTranslating] = useState(false);
+  const [translationDirection, setTranslationDirection] = useState<TranslationDirection>('en_vi');
+  const [translationDomain, setTranslationDomain] = useState<TranslationDomain | null>(null);
   // Tracks whether the DOM currently has a non-empty text selection, so the
   // "Xác minh trích dẫn"/"Dịch đoạn đã chọn" buttons can be disabled instead
   // of doing nothing on click. The selected text itself is read fresh at
@@ -209,12 +215,23 @@ const App: React.FC = () => {
     let timerId: ReturnType<typeof setTimeout>;
     let consecutiveFailures = 0;
     let wasReady = false;
+    let firstFailureAt: number | null = null;
+
+    // A cold backend start (importing torch/transformers/docling and warming
+    // up models) can legitimately take well over a minute on first run —
+    // especially with antivirus scanning freshly-installed binaries — so we
+    // give startup a long grace period before ever showing 'unreachable'.
+    // Once the backend has been ready at least once, a real crash/disconnect
+    // should still surface quickly via the short failure-count threshold.
+    const INITIAL_STARTUP_GRACE_MS = 120000;
+    const POST_READY_FAILURE_LIMIT = 5;
 
     const poll = async () => {
       let nextDelay: number;
       try {
         const health = await checkBackendHealth();
         consecutiveFailures = 0;
+        firstFailureAt = null;
         if (!cancelled) {
           dispatch({ type: 'SET_BACKEND_STATE', payload: { status: health.status, detail: health.detail } });
           if (health.status === 'ready' && !wasReady) {
@@ -225,8 +242,11 @@ const App: React.FC = () => {
         nextDelay = health.status === 'ready' ? 15000 : 1200;
       } catch {
         consecutiveFailures += 1;
+        if (firstFailureAt === null) firstFailureAt = Date.now();
         if (!cancelled) {
-          const unreachable = consecutiveFailures >= 5;
+          const unreachable = wasReady
+            ? consecutiveFailures >= POST_READY_FAILURE_LIMIT
+            : Date.now() - firstFailureAt >= INITIAL_STARTUP_GRACE_MS;
           if (unreachable && wasReady) {
             addToast('error', 'Mất kết nối với máy chủ backend.');
           }
@@ -254,27 +274,33 @@ const App: React.FC = () => {
   }, [addToast]);
 
   useEffect(() => {
-    let savedContent: string | null = null;
-    let savedFileName: string | null = null;
-    try {
-      savedContent = localStorage.getItem(STORAGE_KEY_CONTENT);
-      savedFileName = localStorage.getItem(STORAGE_KEY_FILENAME);
-    } catch {
-      addToast('info', 'Không thể đọc bản tự lưu của trình duyệt.');
-    }
+    let cancelled = false;
 
-    if (savedContent !== null) {
-      dispatch({
-        type: 'LOAD_SAVED_STATE',
-        payload: { content: savedContent, fileName: savedFileName || "Untitled Document" }
-      });
-    } else {
-      const initialText = `# Sẵn sàng chuyển đổi\n\nHãy tải file PDF lên để bắt đầu chuyển đổi sang Markdown bằng DocuMark AI Core.\n`;
-      dispatch({
-        type: 'LOAD_SAVED_STATE',
-        payload: { content: initialText, fileName: "Untitled Document" }
-      });
-    }
+    const load = async () => {
+      let saved: Awaited<ReturnType<typeof loadAutosave>> = null;
+      try {
+        saved = await loadAutosave();
+      } catch {
+        if (!cancelled) addToast('info', 'Không thể đọc bản tự lưu của trình duyệt.');
+      }
+      if (cancelled) return;
+
+      if (saved !== null) {
+        dispatch({
+          type: 'LOAD_SAVED_STATE',
+          payload: { content: saved.content, fileName: saved.fileName || "Untitled Document" }
+        });
+      } else {
+        const initialText = `# Sẵn sàng chuyển đổi\n\nHãy tải file PDF lên để bắt đầu chuyển đổi sang Markdown bằng Mark Tini Core.\n`;
+        dispatch({
+          type: 'LOAD_SAVED_STATE',
+          payload: { content: initialText, fileName: "Untitled Document" }
+        });
+      }
+    };
+
+    load();
+    return () => { cancelled = true; };
   }, [addToast]);
 
   useEffect(() => {
@@ -287,13 +313,11 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const timeoutId = setTimeout(() => {
-      try {
-        localStorage.setItem(STORAGE_KEY_CONTENT, state.content);
-        localStorage.setItem(STORAGE_KEY_FILENAME, state.fileName);
-        dispatch({ type: 'SET_SAVE_STATUS', payload: 'saved' });
-      } catch {
-        addToast('info', 'Bản tự lưu đã vượt giới hạn bộ nhớ; hãy tải file Markdown xuống để tránh mất dữ liệu.');
-      }
+      saveAutosave({ content: state.content, fileName: state.fileName })
+        .then(() => dispatch({ type: 'SET_SAVE_STATUS', payload: 'saved' }))
+        .catch(() => {
+          addToast('info', 'Không thể lưu bản tự động; hãy tải file Markdown xuống để tránh mất dữ liệu.');
+        });
     }, 1000);
     return () => clearTimeout(timeoutId);
   }, [state.content, state.fileName, addToast]);
@@ -578,7 +602,7 @@ const App: React.FC = () => {
     }
     setIsTranslating(true);
     try {
-      const result = await translateText(selectedText);
+      const result = await translateText(selectedText, translationDirection, translationDomain);
       setTranslationResults(prev => [...prev, { id: `${Date.now()}`, ...result }]);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Không thể dịch nội dung đã chọn.';
@@ -586,7 +610,7 @@ const App: React.FC = () => {
     } finally {
       setIsTranslating(false);
     }
-  }, [addToast]);
+  }, [addToast, translationDirection, translationDomain]);
 
   const handleTranslationDismiss = useCallback((id: string) => {
     setTranslationResults(prev => prev.filter(r => r.id !== id));
@@ -751,6 +775,10 @@ const App: React.FC = () => {
           onTranslate={handleTranslate}
           canTranslate={hasSelection}
           isTranslating={isTranslating}
+          translationDirection={translationDirection}
+          onTranslationDirectionChange={setTranslationDirection}
+          translationDomain={translationDomain}
+          onTranslationDomainChange={setTranslationDomain}
           fileName={state.fileName}
           saveStatus={state.saveStatus}
           previewMode={previewMode}
@@ -762,7 +790,9 @@ const App: React.FC = () => {
             {sourceFile && (
               <div className="w-1/2 h-full flex flex-col gap-3">
                 <div className="flex-1 min-h-0">
-                  <PdfViewerBox file={sourceFile} onExtractRegions={handleExtractRegions} />
+                  <Suspense fallback={<div className="h-full flex items-center justify-center border border-gray-200 bg-gray-50 text-gray-400 text-sm rounded-lg animate-pulse">Đang tải trình xem PDF...</div>}>
+                    <PdfViewerBox file={sourceFile} onExtractRegions={handleExtractRegions} />
+                  </Suspense>
                 </div>
                 <ExtractionResultsPanel
                   results={extractionResults}
@@ -779,15 +809,17 @@ const App: React.FC = () => {
                 <span className="text-neutral-400">{state.content.length} ký tự</span>
               </div>
               <div className="flex-1 overflow-hidden" data-color-mode="light">
-                <MDEditor
-                  value={state.content}
-                  onChange={(val) => handleContentChange(val || '')}
-                  preview={previewMode}
-                  height="100%"
-                  hideToolbar={false}
-                  visibleDragbar={false}
-                  className="h-full border-none shadow-none rounded-none"
-                />
+                <Suspense fallback={<div className="h-full flex items-center justify-center text-gray-400 text-sm animate-pulse">Đang tải trình soạn thảo...</div>}>
+                  <MDEditor
+                    value={state.content}
+                    onChange={(val) => handleContentChange(val || '')}
+                    preview={previewMode}
+                    height="100%"
+                    hideToolbar={false}
+                    visibleDragbar={false}
+                    className="h-full border-none shadow-none rounded-none"
+                  />
+                </Suspense>
               </div>
               <CitationVerificationPanel results={citationResults} onDismiss={handleCitationDismiss} />
               <TranslationPanel results={translationResults} onDismiss={handleTranslationDismiss} />
@@ -852,7 +884,7 @@ const App: React.FC = () => {
               </button>
             </div>
             <div className="p-6">
-              <p className="mb-4 text-neutral-600">Ứng dụng chuyển đổi PDF sang Markdown sử dụng <strong>DocuMark AI Core Engine</strong>.</p>
+              <p className="mb-4 text-neutral-600">Ứng dụng chuyển đổi PDF sang Markdown sử dụng <strong>Mark Tini Core Engine</strong>.</p>
               
               <div className="mt-4">
                 <h4 className="font-semibold text-neutral-800 mb-2">Cách sử dụng:</h4>

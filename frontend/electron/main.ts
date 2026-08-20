@@ -1,17 +1,23 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { spawn, ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
-// Default-import + destructure instead of `import { autoUpdater } from
-// 'electron-updater'`: electron-updater exports autoUpdater via a lazy
-// Object.defineProperty getter, which some ESM/CJS interop paths resolve
-// unreliably as a named import. Grabbing the whole CJS module.exports object
-// (always available as the default export) and destructuring at runtime
-// sidesteps that entirely.
+// Default-import instead of `import { autoUpdater } from 'electron-updater'`:
+// electron-updater exports autoUpdater via a lazy Object.defineProperty
+// getter, which some ESM/CJS interop paths resolve unreliably as a named
+// import. Grabbing the whole CJS module.exports object (always available as
+// the default export) sidesteps that entirely.
+//
+// Deliberately NOT destructured here (`const { autoUpdater } = ...`):
+// reading that getter is what constructs the updater, which reads
+// `app.getVersion()` - under `vite-plugin-electron`'s dev launcher that runs
+// before Electron's `app` is in a state electron-updater expects, crashing
+// the whole process at startup. Accessing `electronUpdater.autoUpdater` only
+// at the call site below, inside the `app.isPackaged` + try/catch guard,
+// keeps that access exactly where it's meaningful (a packaged build) and
+// never lets it crash dev mode.
 import electronUpdater from 'electron-updater';
-const { autoUpdater } = electronUpdater;
 
 const API_TOKEN = randomBytes(32).toString('base64url');
 process.env.DOCUMARK_API_TOKEN = API_TOKEN;
@@ -29,7 +35,7 @@ process.on('uncaughtException', (err) => {
   // For all other uncaught exceptions, show an error dialog
   try {
     dialog.showErrorBox(
-      'DocuMark AI - Unexpected Error',
+      'Mark Tini - Unexpected Error',
       `${err.name}: ${err.message}\n\n${err.stack}`
     );
   } catch {
@@ -41,7 +47,9 @@ process.on('uncaughtException', (err) => {
 process.stdout?.on('error', () => {});
 process.stderr?.on('error', () => {});
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// `__dirname` is a native CommonJS global — the build now compiles this file
+// to real CJS output (see vite.config.ts), so no ESM `import.meta.url` shim
+// is needed to derive it.
 
 // ─── Path Resolution ───────────────────────────────────────────
 // Dev mode:  __dirname = frontend/dist-electron/  → APP_ROOT = frontend/
@@ -109,7 +117,7 @@ function startPythonBackend() {
   const offlineModelsPath = path.join(PROJECT_ROOT, 'offline_models');
   const userDataPath = path.join(app.getPath('userData'), 'data');
 
-  safeLog('─── DocuMark AI Backend ───');
+  safeLog('─── Mark Tini Backend ───');
   safeLog(`  Project Root : ${PROJECT_ROOT}`);
   safeLog(`  Python Exe   : ${pythonExe ?? '(not found)'}`);
   safeLog(`  Script       : ${runServerScript}`);
@@ -120,7 +128,7 @@ function startPythonBackend() {
   if (!pythonExe) {
     safeLog(`[FATAL] Python executable not found. Checked: ${pythonCandidates.join(', ')}`);
     dialog.showErrorBox(
-      'DocuMark AI - Backend Not Found',
+      'Mark Tini - Backend Not Found',
       `Không tìm thấy Python runtime.\n\nĐã kiểm tra:\n${pythonCandidates.join('\n')}\n\nHãy chạy script chuẩn bị offline bundle trước khi đóng gói.`
     );
     return;
@@ -129,7 +137,7 @@ function startPythonBackend() {
   if (app.isPackaged && !fs.existsSync(offlineModelsPath)) {
     safeLog(`[FATAL] Offline models not found: ${offlineModelsPath}`);
     dialog.showErrorBox(
-      'DocuMark AI - Offline Models Not Found',
+      'Mark Tini - Offline Models Not Found',
       `Không tìm thấy model AI offline tại:\n${offlineModelsPath}\n\nBản cài đặt chưa được build đúng quy trình.`
     );
     return;
@@ -138,7 +146,7 @@ function startPythonBackend() {
   if (!fs.existsSync(runServerScript)) {
     safeLog(`[FATAL] Server script not found: ${runServerScript}`);
     dialog.showErrorBox(
-      'DocuMark AI - Server Script Not Found',
+      'Mark Tini - Server Script Not Found',
       `Không tìm thấy file server:\n${runServerScript}`
     );
     return;
@@ -182,7 +190,7 @@ function startPythonBackend() {
   pythonProcess.on('error', (err) => {
     safeLog(`[Backend SPAWN ERROR] ${err.message}`);
     dialog.showErrorBox(
-      'DocuMark AI - Lỗi khởi động Backend',
+      'Mark Tini - Lỗi khởi động Backend',
       `Không thể khởi chạy máy chủ Python:\n${err.message}`
     );
   });
@@ -214,7 +222,7 @@ function startPythonBackend() {
     if (restartAttempts >= MAX_RESTART_ATTEMPTS) {
       safeLog(`[Backend] Giving up after ${restartAttempts} restart attempts.`);
       dialog.showErrorBox(
-        'DocuMark AI - Backend liên tục gặp sự cố',
+        'Mark Tini - Backend liên tục gặp sự cố',
         `Máy chủ xử lý đã dừng đột ngột ${restartAttempts} lần liên tiếp và sẽ không tự khởi động lại nữa.\n\nVui lòng khởi động lại ứng dụng. Nếu sự cố tiếp diễn, hãy kiểm tra log để biết chi tiết.`
       );
       return;
@@ -235,7 +243,7 @@ function createWindow() {
   win = new BrowserWindow({
     width: 1200,
     height: 800,
-    title: 'DocuMark AI',
+    title: 'Mark Tini',
     icon: path.join(process.env.VITE_PUBLIC!, 'favicon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
@@ -324,7 +332,7 @@ app.whenReady().then(() => {
   // to check against in dev, and unpackaged runs can't self-replace anyway).
   if (app.isPackaged) {
     try {
-      autoUpdater.checkForUpdatesAndNotify().catch((err) => {
+      electronUpdater.autoUpdater.checkForUpdatesAndNotify().catch((err) => {
         safeLog(`[AutoUpdater] Check failed: ${err instanceof Error ? err.message : err}`);
       });
     } catch (err) {

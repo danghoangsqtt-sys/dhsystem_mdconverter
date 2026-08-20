@@ -13,7 +13,13 @@
       "Bash(git commit -m ' *)",
       "Bash(git push *)",
       "Bash(xargs ls *)",
-      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); deps={**d.get\\('dependencies',{}\\), **d.get\\('devDependencies',{}\\)}; [print\\(f'{k}: {v}'\\) for k,v in deps.items\\(\\) if 'md' in k.lower\\(\\) or 'editor' in k.lower\\(\\) or 'codemirror' in k.lower\\(\\) or 'uiw' in k.lower\\(\\)]\")"
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); deps={**d.get\\('dependencies',{}\\), **d.get\\('devDependencies',{}\\)}; [print\\(f'{k}: {v}'\\) for k,v in deps.items\\(\\) if 'md' in k.lower\\(\\) or 'editor' in k.lower\\(\\) or 'codemirror' in k.lower\\(\\) or 'uiw' in k.lower\\(\\)]\")",
+      "Bash(git -C \"E:\\\\data\\\\2.MyProject\\\\2026\\\\markdown_convert\" status --porcelain=v1)",
+      "Bash(git -C \"E:\\\\data\\\\2.MyProject\\\\2026\\\\markdown_convert\" diff --stat)",
+      "Bash(git *)",
+      "Bash(\"docling-env/Scripts/python.exe\" -c \"import docling; print\\(docling.__file__\\)\")",
+      "Bash(\"docling-env/Scripts/python.exe\" -m pip show docling)",
+      "Bash(./docling-env/Scripts/python.exe -m unittest discover -s backend/tests -v)"
     ]
   }
 }

@@ -69,9 +69,14 @@ export interface CitationVerificationEntry extends CitationVerificationResult {
 }
 
 // Mirrors the response shape of POST /api/translate in backend/src/main.py.
+// direction/domain are typed loosely here (matching HistoryEntry.lang/table_mode
+// in services/api.ts) — the strict TranslationDirection/TranslationDomain
+// unions live there too, where the request is built and typo-safety matters.
 export interface TranslationResult {
   original_text: string;
   translated_text: string;
+  direction: string;
+  domain: string | null;
 }
 
 // A TranslationResult with a client-generated id, for the review list —

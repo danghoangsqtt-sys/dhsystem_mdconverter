@@ -1,8 +1,13 @@
-"""Selection-based EN->VI translation via a local NMT model.
+"""Selection-based EN<->VI translation via a local NMT model.
 
 Formulas (`$...$`, `$$...$$`) are masked before translation and restored
 verbatim afterward, so LaTeX math in a selected passage survives translation
-unmodified instead of being garbled by the language model.
+unmodified instead of being garbled by the language model. Recognized
+domain-glossary terms (see `translation_glossaries.py`) go through the same
+mask/restore mechanism, except the placeholder is restored to the glossary's
+preferred target-language term rather than the original span — this forces
+consistent domain terminology instead of leaving it to the NMT model's
+generic (and sometimes inconsistent) rendering.
 
 Markdown code spans are deliberately NOT masked here: by the time a passage
 reaches this module it has already passed through the frontend's rendered-
@@ -26,6 +31,7 @@ import threading
 from typing import TYPE_CHECKING, Any
 
 from ..config import settings
+from .translation_glossaries import DOMAINS
 
 if TYPE_CHECKING:
     from transformers import PreTrainedModel, PreTrainedTokenizerBase
@@ -36,9 +42,14 @@ _EN_PREFIX = "en: "
 _VI_PREFIX = "vi: "
 _MAX_TOKENS = 512
 
+DIRECTION_EN_VI = "en_vi"
+DIRECTION_VI_EN = "vi_en"
+_VALID_DIRECTIONS = {DIRECTION_EN_VI, DIRECTION_VI_EN}
+
 _BLOCK_FORMULA_RE = re.compile(r"\$\$.+?\$\$", re.DOTALL)
 _INLINE_FORMULA_RE = re.compile(r"\$[^\n$]+?\$")
 _PLACEHOLDER_RE = re.compile(r"FORMULA(\d+)")
+_TERM_PLACEHOLDER_RE = re.compile(r"TERM(\d+)")
 
 
 def _mask_formulas(text: str) -> tuple[str, list[str]]:
@@ -78,6 +89,49 @@ def _unmask_formulas(translated: str, spans: list[str]) -> str | None:
     if sorted(found) != list(range(len(spans))):
         return None
     return _PLACEHOLDER_RE.sub(lambda m: spans[int(m.group(1))], translated)
+
+
+def _mask_terms(text: str, glossary: list[tuple[str, str]], direction: str) -> tuple[str, list[str]]:
+    """Replaces recognized domain-glossary source terms with TERM<i>-style
+    placeholders (same survives-generation-intact rationale as FORMULA<i>,
+    see `_mask_formulas`), recording the *target*-language term to restore
+    afterward rather than the original span.
+
+    `glossary` entries are `(english_term, vietnamese_term)`; which side is
+    the "source to find" vs. "target to restore" flips with `direction`.
+    Longer terms are matched first so a shorter term that is a substring of a
+    longer one (e.g. "network" inside "neural network") can't shadow it.
+    Matching is case-insensitive with word boundaries so partial-word hits
+    (e.g. "AI" inside "against") are not masked.
+    """
+    source_index = 1 if direction == DIRECTION_VI_EN else 0
+    target_index = 0 if direction == DIRECTION_VI_EN else 1
+    ordered = sorted(glossary, key=lambda pair: len(pair[source_index]), reverse=True)
+
+    targets: list[str] = []
+
+    def _replace_factory(target_term: str):
+        def _replace(_match: re.Match[str]) -> str:
+            targets.append(target_term)
+            return f"TERM{len(targets) - 1}"
+
+        return _replace
+
+    for pair in ordered:
+        source_term, target_term = pair[source_index], pair[target_index]
+        pattern = re.compile(rf"(?<!\w){re.escape(source_term)}(?!\w)", re.IGNORECASE)
+        text = pattern.sub(_replace_factory(target_term), text)
+    return text, targets
+
+
+def _unmask_terms(translated: str, targets: list[str]) -> str | None:
+    """Restores TERM<i> placeholders to their glossary target term. None
+    signals a fallback-worthy mismatch, same contract as `_unmask_formulas`.
+    """
+    found = [int(m.group(1)) for m in _TERM_PLACEHOLDER_RE.finditer(translated)]
+    if sorted(found) != list(range(len(targets))):
+        return None
+    return _TERM_PLACEHOLDER_RE.sub(lambda m: targets[int(m.group(1))], translated)
 
 
 # Lazily built and cached on first translate call (unlike Docling's default
@@ -144,33 +198,57 @@ def _strip_direction_prefix(text: str) -> str:
     return stripped
 
 
-def _generate(text: str) -> str:
-    """Blocking inference call — callers must run this via asyncio.to_thread."""
+def _generate(text: str, direction: str) -> str:
+    """Blocking inference call — callers must run this via asyncio.to_thread.
+
+    The prefix marks the *source* language for envit5-translation's single
+    bidirectional checkpoint: "en: " for an English source (-> Vietnamese
+    output), "vi: " for a Vietnamese source (-> English output).
+    """
     model, tokenizer = _get_model_and_tokenizer()
-    inputs = tokenizer(_EN_PREFIX + text, return_tensors="pt", truncation=True, max_length=_MAX_TOKENS)
+    prefix = _VI_PREFIX if direction == DIRECTION_VI_EN else _EN_PREFIX
+    inputs = tokenizer(prefix + text, return_tensors="pt", truncation=True, max_length=_MAX_TOKENS)
     outputs = model.generate(**inputs, max_length=_MAX_TOKENS)
     decoded = tokenizer.decode(outputs[0], skip_special_tokens=True)
     return _strip_direction_prefix(decoded)
 
 
-async def translate_to_vietnamese(text: str) -> str:
-    """Translates a selected English passage to Vietnamese.
+async def translate_text(text: str, direction: str = DIRECTION_EN_VI, domain: str | None = None) -> str:
+    """Translates a selected passage between English and Vietnamese.
 
-    Formulas are masked out beforehand and restored verbatim afterward. If
-    the model's output doesn't contain every placeholder intact, this falls
-    back to translating the original, unmasked text once rather than
-    returning a silently corrupted formula.
+    `direction` selects which side is the source (`DIRECTION_EN_VI` or
+    `DIRECTION_VI_EN`) — anything else is a caller bug, so it raises rather
+    than silently guessing. `domain` is an optional key into
+    `translation_glossaries.DOMAINS`; an unrecognized or omitted domain is
+    treated the same as "no domain glossary" (soft-fail — it only narrows an
+    optional enhancement, not core translation correctness).
+
+    Formulas, and any recognized domain-glossary terms, are masked out
+    beforehand and restored afterward (formulas verbatim, terms to their
+    glossary target). If the model's output doesn't contain every
+    placeholder intact, this falls back to translating the original,
+    unmasked text once rather than returning a silently corrupted result.
     """
+    if direction not in _VALID_DIRECTIONS:
+        raise ValueError(f"Unknown translation direction: {direction!r}")
+
     stripped = text.strip()
     if not stripped:
         return ""
 
-    masked, spans = _mask_formulas(stripped)
-    if spans:
-        raw_output = await asyncio.to_thread(_generate, masked)
-        restored = _unmask_formulas(raw_output, spans)
+    masked, formula_spans = _mask_formulas(stripped)
+    glossary = DOMAINS.get(domain) if domain else None
+    term_targets: list[str] = []
+    if glossary:
+        masked, term_targets = _mask_terms(masked, glossary, direction)
+
+    if formula_spans or term_targets:
+        raw_output = await asyncio.to_thread(_generate, masked, direction)
+        restored: str | None = _unmask_formulas(raw_output, formula_spans)
+        if restored is not None:
+            restored = _unmask_terms(restored, term_targets)
         if restored is not None:
             return restored
-        logger.warning("Formula placeholder mismatch after translation; falling back to unmasked text.")
+        logger.warning("Placeholder mismatch after translation; falling back to unmasked text.")
 
-    return await asyncio.to_thread(_generate, stripped)
+    return await asyncio.to_thread(_generate, stripped, direction)

@@ -12,6 +12,8 @@ import {
   Languages
 } from 'lucide-react';
 import type { PreviewType } from '@uiw/react-md-editor';
+import type { TranslationDirection, TranslationDomain } from '../services/api';
+import { TRANSLATION_DIRECTION_OPTIONS, TRANSLATION_DOMAIN_OPTIONS } from '../services/api';
 
 interface ToolbarProps {
   onSave: () => void;
@@ -22,6 +24,10 @@ interface ToolbarProps {
   onTranslate: () => void;
   canTranslate: boolean;
   isTranslating: boolean;
+  translationDirection: TranslationDirection;
+  onTranslationDirectionChange: (direction: TranslationDirection) => void;
+  translationDomain: TranslationDomain | null;
+  onTranslationDomainChange: (domain: TranslationDomain | null) => void;
   fileName: string;
   saveStatus: 'saved' | 'saving';
   previewMode: PreviewType;
@@ -43,6 +49,10 @@ const Toolbar: React.FC<ToolbarProps> = ({
   onTranslate,
   canTranslate,
   isTranslating,
+  translationDirection,
+  onTranslationDirectionChange,
+  translationDomain,
+  onTranslationDomainChange,
   fileName,
   saveStatus,
   previewMode,
@@ -64,7 +74,7 @@ const Toolbar: React.FC<ToolbarProps> = ({
             <FileText size={18} strokeWidth={1.5} />
           </div>
           <div>
-             <h1 className="font-semibold text-[13px] text-gray-800 leading-tight">DocuMark</h1>
+             <h1 className="font-semibold text-[13px] text-gray-800 leading-tight">Mark Tini</h1>
              <div className="flex items-center space-x-2">
                 <p className="text-[11px] text-gray-500 truncate max-w-[150px]">{fileName}</p>
                 <span className="text-gray-300">|</span>
@@ -115,10 +125,35 @@ const Toolbar: React.FC<ToolbarProps> = ({
           <span>{isVerifyingCitation ? 'Đang xác minh...' : 'Xác minh trích dẫn'}</span>
         </button>
 
+        <div className="flex items-center gap-1">
+          <select
+            value={translationDirection}
+            onChange={(e) => onTranslationDirectionChange(e.target.value as TranslationDirection)}
+            disabled={isTranslating}
+            title="Chiều dịch"
+            className="text-[11px] border border-gray-200 rounded px-1.5 py-1.5 bg-white text-gray-700 disabled:opacity-50"
+          >
+            {TRANSLATION_DIRECTION_OPTIONS.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+          <select
+            value={translationDomain ?? ''}
+            onChange={(e) => onTranslationDomainChange(e.target.value === '' ? null : (e.target.value as TranslationDomain))}
+            disabled={isTranslating}
+            title="Lĩnh vực thuật ngữ"
+            className="text-[11px] border border-gray-200 rounded px-1.5 py-1.5 bg-white text-gray-700 disabled:opacity-50 max-w-[128px]"
+          >
+            {TRANSLATION_DOMAIN_OPTIONS.map(opt => (
+              <option key={opt.value ?? 'none'} value={opt.value ?? ''}>{opt.label}</option>
+            ))}
+          </select>
+        </div>
+
         <button
           onClick={onTranslate}
           disabled={!canTranslate || isTranslating}
-          title={canTranslate ? 'Dịch đoạn đã chọn sang Tiếng Việt' : 'Bôi đen một đoạn trong bản xem trước để dịch'}
+          title={canTranslate ? 'Dịch đoạn đã chọn' : 'Bôi đen một đoạn trong bản xem trước để dịch'}
           className="flex items-center space-x-2 px-3 py-1.5 rounded-md text-[13px] font-medium transition-colors border bg-white hover:bg-gray-50 text-gray-700 border-gray-200 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {isTranslating ? <Loader2 size={14} className="animate-spin" /> : <Languages size={14} />}

@@ -1,4 +1,4 @@
-# Clean-Machine Verification — DocuMark AI v1.2.0
+# Clean-Machine Verification — Mark Tini v1.2.0
 
 Gate cuối cùng trong `PHASE-STATE.md` trước khi release: xác nhận installer NSIS
 chạy được trên Windows không có Python, pip cache, hay model cache nào từ máy dev.
@@ -15,14 +15,14 @@ Checklist này để chạy tay trên máy/VM sạch — không thể tự độ
 
 ## 2. Chuyển file & xác minh toàn vẹn
 
-- Nguồn: `frontend\release\DocuMark AI Setup 1.2.0.exe` (1,992,753,048 bytes ≈ 1,900.4 MiB)
+- Nguồn: `frontend\release\Mark Tini Setup 1.2.0.exe` (1,992,746,966 bytes ≈ 1,900.4 MiB)
 - Sau khi copy sang máy đích, chạy (PowerShell hoặc cmd, không cần cài gì thêm):
   ```
-  certutil -hashfile "DocuMark AI Setup 1.2.0.exe" SHA256
+  certutil -hashfile "Mark Tini Setup 1.2.0.exe" SHA256
   ```
 - Kết quả **phải khớp**:
   ```
-  0ae719dda89d7f09b7dc39ab96c054e23b19d1d2ebacdbca2a90611d52b0598f
+  f83143354beadba77d968806ac83c28137738843c83c77370761975e4dc3f84c
   ```
 - Không khớp → file hỏng/thiếu khi copy, copy lại trước khi tiếp tục, đừng cài.
 
@@ -62,15 +62,15 @@ Chuẩn bị sẵn 1 file PDF và 1 file DOCX thật (nên có ít nhất 1 bả
 
 ## 6. Vị trí lưu dữ liệu
 
-- [ ] Sau khi convert, kiểm tra `%APPDATA%\DocuMark AI\data\uploads` và
-  `%APPDATA%\DocuMark AI\data\outputs` — file phải nằm ở đây, **không** nằm trong
+- [ ] Sau khi convert, kiểm tra `%APPDATA%\Mark Tini\data\uploads` và
+  `%APPDATA%\Mark Tini\data\outputs` — file phải nằm ở đây, **không** nằm trong
   thư mục cài đặt (`Program Files\...`) và không liên quan gì tới thư mục project.
 - [ ] Panel history trong app hiển thị đúng job vừa convert, mở lại output cũ đọc được.
 
 ## 7. Gỡ cài đặt (khuyến nghị, không bắt buộc)
 
 - [ ] Uninstall qua Settings/Control Panel không lỗi.
-- [ ] Sau khi gỡ, Task Manager không còn tiến trình DocuMark/python nào.
+- [ ] Sau khi gỡ, Task Manager không còn tiến trình Mark Tini/python nào.
 
 ## Nếu có lỗi
 

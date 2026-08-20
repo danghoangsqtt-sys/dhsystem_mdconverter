@@ -1,4 +1,4 @@
-"""Runtime configuration for the local DocuMark backend.
+"""Runtime configuration for the local Mark Tini backend.
 
 All values are resolved once at process start. Electron supplies production
 paths and the API token through environment variables; command-line/dev runs
@@ -7,6 +7,7 @@ fall back to safe project-local defaults.
 
 from __future__ import annotations
 
+import logging
 import os
 import secrets
 from dataclasses import dataclass
@@ -58,6 +59,14 @@ def _read_str(name: str, default: str | None) -> str | None:
     return stripped or default
 
 
+def _read_log_level(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if not raw:
+        return default
+    level = logging.getLevelName(raw.strip().upper())
+    return level if isinstance(level, int) else default
+
+
 @dataclass(frozen=True)
 class Settings:
     project_root: Path
@@ -66,6 +75,8 @@ class Settings:
     output_dir: Path
     history_path: Path
     frontend_dist_dir: Path
+    log_dir: Path
+    log_level: int
     api_token: str
     trusted_origins: tuple[str, ...]
     cors_origins: tuple[str, ...]
@@ -96,6 +107,8 @@ def load_settings() -> Settings:
         output_dir=data_dir / "outputs",
         history_path=data_dir / "history.json",
         frontend_dist_dir=PROJECT_ROOT / "frontend" / "dist",
+        log_dir=data_dir / "logs",
+        log_level=_read_log_level("DOCUMARK_LOG_LEVEL", logging.INFO),
         api_token=os.getenv("DOCUMARK_API_TOKEN") or secrets.token_urlsafe(32),
         trusted_origins=trusted_origins,
         cors_origins=cors_origins,

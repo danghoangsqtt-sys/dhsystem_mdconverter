@@ -43,7 +43,7 @@ class ApiSecurityTests(unittest.TestCase):
             headers=self.auth,
         )
         self.assertIn(response.status_code, {404, 422})
-        self.assertNotIn("DocuMark AI Editor", response.text)
+        self.assertNotIn("Mark Tini Editor", response.text)
 
     def test_unsupported_upload_is_rejected_before_queueing(self) -> None:
         response = self.client.post(
@@ -52,6 +52,77 @@ class ApiSecurityTests(unittest.TestCase):
             files={"file": ("payload.exe", b"MZ", "application/octet-stream")},
         )
         self.assertEqual(response.status_code, 415)
+
+    def test_upload_content_mismatch_is_rejected_and_cleaned_up(self) -> None:
+        """A renamed file (e.g. a .txt saved as .pdf) must be caught by
+        content sniffing, not just the extension allowlist - and must not
+        leave the mislabeled bytes behind in the upload directory."""
+        before = set(main.settings.upload_dir.glob("*"))
+        response = self.client.post(
+            "/api/jobs",
+            headers=self.auth,
+            files={"file": ("notes.pdf", b"just plain text, not a pdf", "application/pdf")},
+        )
+        self.assertEqual(response.status_code, 415)
+        self.assertEqual(before, set(main.settings.upload_dir.glob("*")))
+
+    def test_upload_content_mismatch_rejects_swapped_ooxml_type(self) -> None:
+        """docx and pptx share the same zip container, so a pptx renamed to
+        .docx must still be rejected by the internal-member check, not just
+        'is this a valid zip'."""
+        import io
+        import zipfile
+
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as archive:
+            archive.writestr("ppt/presentation.xml", "<p:presentation/>")
+        before = set(main.settings.upload_dir.glob("*"))
+        response = self.client.post(
+            "/api/jobs",
+            headers=self.auth,
+            files={
+                "file": (
+                    "slides.docx",
+                    buffer.getvalue(),
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                )
+            },
+        )
+        self.assertEqual(response.status_code, 415)
+        self.assertEqual(before, set(main.settings.upload_dir.glob("*")))
+
+    def test_upload_content_matching_extension_is_accepted(self) -> None:
+        """A minimal but genuine docx (real zip, required member present)
+        must pass content validation and reach the job queue."""
+        import io
+        import zipfile
+
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as archive:
+            archive.writestr("word/document.xml", "<w:document/>")
+        response = self.client.post(
+            "/api/jobs",
+            headers=self.auth,
+            files={
+                "file": (
+                    "real.docx",
+                    buffer.getvalue(),
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                )
+            },
+        )
+        self.assertEqual(response.status_code, 202)
+        # Cancel through the real endpoint (not `job_manager.cancel()`
+        # directly) so this stays on TestClient's single portal thread,
+        # matching how production always calls cancel from the same
+        # event loop as the worker - calling the manager directly from the
+        # test's own thread would race the worker across threads in a way
+        # that can't happen through the real HTTP surface.
+        cancel_response = self.client.delete(
+            f"/api/jobs/{response.json()['job_id']}",
+            headers=self.auth,
+        )
+        self.assertEqual(cancel_response.status_code, 200)
 
     def test_verify_citation_requires_session_token(self) -> None:
         response = self.client.post("/api/verify-citation", json={"text": "some claim"})
@@ -76,7 +147,7 @@ class ApiSecurityTests(unittest.TestCase):
             self.assertIn("text/html", response.headers.get("content-type", ""))
             self.assertIn('<div id="root">', response.text)
         else:
-            self.assertEqual(response.json(), {"message": "DocuMark AI Local API"})
+            self.assertEqual(response.json(), {"message": "Mark Tini Local API"})
 
     def test_upload_limit_is_enforced_and_partial_file_is_removed(self) -> None:
         tiny_limit_settings = replace(main.settings, max_upload_bytes=4)

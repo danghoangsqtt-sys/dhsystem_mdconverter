@@ -169,8 +169,24 @@ def convert_document_to_markdown(
         with _conversion_lock:
             result = converter.convert(resolved_path)
 
-        # Export the document model to markdown
-        raw_markdown = result.document.export_to_markdown()
+        if result.input.format == InputFormat.IMAGE:
+            # Standalone images only ever reach this function as cropped OCR
+            # snippets from the PDF viewer's region-extraction tool (never a
+            # general document upload), so the user always wants recognized
+            # text back. docling's layout model is unreliable on small/sparse
+            # crops like these: it often spuriously tags part of the image as
+            # a Picture cluster, which either duplicates a "<!-- image -->"
+            # placeholder next to the real text, or — when the cluster
+            # overlaps the text — reparents the OCR'd TextItems as that
+            # Picture's children, where the default markdown export never
+            # surfaces them. Reading document.texts directly sidesteps the
+            # layout/picture classification entirely and always recovers
+            # whatever text OCR actually found.
+            raw_markdown = "\n\n".join(
+                t.text.strip() for t in result.document.texts if t.text and t.text.strip()
+            )
+        else:
+            raw_markdown = result.document.export_to_markdown()
         logger.info(f"Raw conversion complete: {resolved_path}")
 
         # Post-process: clean up tables, remove empty columns, etc.

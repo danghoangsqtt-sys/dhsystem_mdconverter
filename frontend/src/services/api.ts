@@ -254,14 +254,38 @@ export const verifyCitation = async (text: string): Promise<CitationVerification
   }
 };
 
+export type TranslationDirection = 'en_vi' | 'vi_en';
+export type TranslationDomain = 'cs_ai' | 'stem' | 'econ_social';
+
+export const TRANSLATION_DIRECTION_OPTIONS: { value: TranslationDirection; label: string }[] = [
+  { value: 'en_vi', label: 'Anh → Việt' },
+  { value: 'vi_en', label: 'Việt → Anh' },
+];
+
+// value: null means "no domain glossary" — always available, matches the
+// backend's Optional[str] domain field. Mirrors DOMAIN_LABELS in
+// backend/src/services/translation_glossaries.py; keep both in sync.
+export const TRANSLATION_DOMAIN_OPTIONS: { value: TranslationDomain | null; label: string }[] = [
+  { value: null, label: 'Chung (không chọn lĩnh vực)' },
+  { value: 'cs_ai', label: 'Khoa học máy tính / AI-ML' },
+  { value: 'stem', label: 'Toán - Lý - Hóa' },
+  { value: 'econ_social', label: 'Kinh tế / Khoa học xã hội' },
+];
+
 // Runs entirely offline once the local NMT model is loaded — no internet
 // required, unlike verifyCitation above. Generous timeout since the first
 // call in a session also has to load the ~1GB model before it can translate.
-export const translateText = async (text: string): Promise<TranslationResult> => {
+// `domain`, if given, forces domain-specific terminology in the output
+// instead of the model's generic (and sometimes inconsistent) rendering.
+export const translateText = async (
+  text: string,
+  direction: TranslationDirection = 'en_vi',
+  domain: TranslationDomain | null = null,
+): Promise<TranslationResult> => {
   try {
     const response = await axios.post<TranslationResult>(
       `${API_BASE_URL}/translate`,
-      { text },
+      { text, direction, domain },
       { headers: await authHeaders(), timeout: 60000 },
     );
     return response.data;
