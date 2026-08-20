@@ -1,9 +1,9 @@
 <div align="center">
-  <img src="docs/logo.svg" alt="DocuMark AI Logo" width="128" height="128" />
-  <h1>DocuMark AI Editor</h1>
+  <img src="docs/logo.svg" alt="Mark Tini Logo" width="128" height="128" />
+  <h1>Mark Tini Editor</h1>
   <p><strong>Ứng dụng Windows chuyển tài liệu sang Markdown, xử lý cục bộ bằng Docling</strong></p>
   <p>
-    <img alt="Version" src="https://img.shields.io/badge/version-1.2.0-58A6FF?style=flat-square"/>
+    <img alt="Version" src="https://img.shields.io/badge/version-1.3.0-58A6FF?style=flat-square"/>
     <img alt="License" src="https://img.shields.io/badge/license-MIT-3FB950?style=flat-square"/>
     <img alt="Platform" src="https://img.shields.io/badge/platform-Windows-0078D4?style=flat-square&logo=windows"/>
   </p>
@@ -11,7 +11,7 @@
 
 ## Tổng quan
 
-DocuMark AI chuyển PDF, DOCX, PPTX, HTML và ảnh sang Markdown. Ứng dụng có OCR Việt/Anh, hai chế độ nhận dạng bảng, trích xuất vùng PDF, lịch sử kết quả và trình soạn thảo Markdown.
+Mark Tini chuyển PDF, DOCX, PPTX, HTML và ảnh sang Markdown. Ứng dụng có OCR Việt/Anh, hai chế độ nhận dạng bảng, trích xuất vùng PDF, lịch sử kết quả và trình soạn thảo Markdown.
 
 Từ v1.2, luồng chuyển đổi dùng một hàng đợi backend có trạng thái thật. Mỗi file được kiểm tra loại/kích thước, xử lý tuần tự để tránh tranh chấp RAM/CPU, ghi kết quả nguyên tử và có thể hủy. Bản Electron production dùng API token theo phiên và lưu dữ liệu tại thư mục `userData` của ứng dụng.
 
@@ -39,6 +39,19 @@ Electron/React ── token + HTTP ──> FastAPI ──> single-worker queue �
 - Storage: development dùng `data/`; bản cài đặt dùng `app.getPath('userData')/data`.
 
 Thiết kế chi tiết và các invariant nằm tại [ARCHITECTURE.md](.viepilot/ARCHITECTURE.md) và [SPEC v1.2](.viepilot/phases/phase-8-reliability-security-offline/SPEC.md).
+
+## Tài liệu phiên bản hiện tại
+
+Phiên bản hoàn thiện hiện tại: 1.3.0.
+
+- [Báo cáo kỹ thuật v1.3.0](docs/bao-cao-ky-thuat-v1.3.0.md)
+- [Hướng dẫn sử dụng v1.3.0](docs/huong-dan-su-dung-v1.3.0.md)
+- [Luồng hoạt động dự án](docs/luong-hoat-dong-du-an.md)
+- [Changelog](CHANGELOG.md)
+
+## Trạng thái phát hành
+
+v1.3.0 là phiên bản hiện tại và đã được đánh dấu là release hoàn thiện với các cải tiến chính: sửa lỗi OCR vùng PDF, đơn giản hóa giao diện dịch, sidebar thu gọn/kéo giãn, lưu tự động bằng IndexedDB, offline model bundle và kiểm soát queue backend. Dự án đang ở trạng thái ổn định cho việc phát hành và dùng nội bộ/đẩy GitHub.
 
 ## Chạy development
 
@@ -103,6 +116,6 @@ Lưu ý: lịch sử Git đã được rewrite để gỡ dữ liệu chuyển �
 
 ## Trạng thái phát hành
 
-v1.2 đã vượt qua unit tests, lint/build, dependency audit và offline PDF smoke test tại workspace phát triển. Clean-machine installer test vẫn là release gate thủ công trước khi công bố installer.
+v1.3 đã vượt qua unit tests, lint/build, dependency audit và offline PDF smoke test tại workspace phát triển; installer đã được build lại và cài đặt/khởi chạy thành công trên máy phát triển sau các thay đổi mới nhất. Clean-machine installer test (máy Windows sạch, chưa từng cài Python/Node/IDE dev) vẫn là release gate thủ công trước khi công bố installer.
 
 Xem lịch sử thay đổi tại [CHANGELOG.md](CHANGELOG.md).
