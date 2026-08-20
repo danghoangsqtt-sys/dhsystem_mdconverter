@@ -1,6 +1,10 @@
 import os
 import logging
 import threading
+import tempfile
+from pathlib import Path
+
+from PIL import Image
 
 from ..config import settings
 
@@ -143,6 +147,58 @@ def warm_up_models() -> None:
         startup_state["detail"] = f"Lỗi tải mô hình: {e}"
 
 
+def upscale_region_image(file_path: str, min_width: int = 800) -> str:
+    """
+    Upscale cropped region images (from PDF viewer extraction) to improve OCR
+    accuracy. Small/sparse crops often fail Docling's layout classification
+    and EasyOCR confidence, so we upscale 2x–3x before conversion if the image
+    is smaller than min_width pixels.
+
+    Args:
+        file_path: Path to the original region image (PNG)
+        min_width: Upscale if image width < this value (default 800)
+
+    Returns:
+        Path to upscaled image (original file if already large enough, or
+        a new temp file with 2x-3x scaling)
+    """
+    try:
+        img = Image.open(file_path)
+        width, height = img.size
+        
+        # Only upscale small images; large ones already have good resolution
+        if width >= min_width:
+            logger.info(f"Region image already large ({width}x{height}), skipping upscale")
+            return file_path
+        
+        # Calculate upscale factor (2x–3x depending on how small)
+        if width < 300:
+            scale = 3
+        elif width < 500:
+            scale = 2.5
+        else:
+            scale = 2
+        
+        new_width = int(width * scale)
+        new_height = int(height * scale)
+        
+        logger.info(f"Upscaling region image {width}x{height} → {new_width}x{new_height} ({scale}x)")
+        
+        # LANCZOS resampling: highest quality for upscaling
+        upscaled = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+        
+        # Save to a temp file (Docling needs a file path, not bytes)
+        temp_file = Path(tempfile.gettempdir()) / f"region_upscaled_{Path(file_path).stem}.png"
+        upscaled.save(temp_file, format="PNG", optimize=False)
+        
+        logger.info(f"Upscaled region saved to {temp_file}")
+        return str(temp_file)
+    
+    except Exception as e:
+        logger.warning(f"Failed to upscale region image {file_path}: {e}, using original")
+        return file_path
+
+
 def convert_document_to_markdown(
     file_path: str,
     lang: str = DEFAULT_OCR_LANG,
@@ -162,12 +218,22 @@ def convert_document_to_markdown(
 
         import pathlib
         resolved_path = pathlib.Path(file_path).resolve()
-        logger.info(f"Starting conversion for: {resolved_path} (lang={lang}, table_mode={table_mode})")
+        
+        # Upscale region images (cropped from PDF viewer) to improve OCR accuracy
+        processing_path = file_path
+        is_region_image = resolved_path.suffix.lower() in {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff"}
+        if is_region_image:
+            processing_path = upscale_region_image(str(resolved_path))
+            logger.info(f"Region image upscaling: {file_path} → {processing_path}")
+        
+        resolved_processing_path = pathlib.Path(processing_path).resolve()
+        logger.info(f"Starting conversion for: {resolved_processing_path} (lang={lang}, table_mode={table_mode}, region={is_region_image})")
+        
         # DocumentConverter pipelines hold native/ML state and are not treated
         # as thread-safe. The API job queue is also single-worker, but this lock
         # protects direct library callers and startup/request overlap.
         with _conversion_lock:
-            result = converter.convert(resolved_path)
+            result = converter.convert(resolved_processing_path)
 
         if result.input.format == InputFormat.IMAGE:
             # Standalone images only ever reach this function as cropped OCR
@@ -182,16 +248,30 @@ def convert_document_to_markdown(
             # surfaces them. Reading document.texts directly sidesteps the
             # layout/picture classification entirely and always recovers
             # whatever text OCR actually found.
+            
+            # Collect all OCR text with less aggressive filtering — include
+            # text even if confidence is slightly lower, as region-extracted
+            # crops benefit from being more permissive (already upscaled above).
             raw_markdown = "\n\n".join(
-                t.text.strip() for t in result.document.texts if t.text and t.text.strip()
+                t.text.strip() for t in result.document.texts 
+                if t.text and len(t.text.strip()) >= 2  # Keep text ≥2 chars
             )
+            logger.info(f"Extracted {len(result.document.texts)} text items from region image")
         else:
             raw_markdown = result.document.export_to_markdown()
-        logger.info(f"Raw conversion complete: {resolved_path}")
+        logger.info(f"Raw conversion complete: {resolved_processing_path}")
 
         # Post-process: clean up tables, remove empty columns, etc.
         cleaned_markdown = clean_markdown(raw_markdown)
         logger.info(f"Post-processing complete: {file_path}")
+        
+        # Clean up temp upscaled file if it was created
+        if is_region_image and processing_path != str(resolved_path):
+            try:
+                Path(processing_path).unlink()
+                logger.info(f"Cleaned up temp upscaled file: {processing_path}")
+            except Exception as e:
+                logger.warning(f"Failed to clean up temp file {processing_path}: {e}")
 
         return cleaned_markdown
     except Exception as e:
