@@ -31,12 +31,14 @@
       "target": [
         "nsis"
       ],
-      "icon": "public/favicon.png"
+      "icon": "build/icons/tini-suite.ico"
     },
     "nsis": {
       "oneClick": true,
       "perMachine": false,
-      "allowToChangeInstallationDirectory": false
+      "allowToChangeInstallationDirectory": false,
+      "installerIcon": "build/icons/tini-suite.ico",
+      "uninstallerIcon": "build/icons/tini-suite.ico"
     },
     "files": [
       "dist/**/*",
