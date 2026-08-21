@@ -2,7 +2,7 @@
 
 ## Current State
 - **Current Phase:** Phase 13 — Tini Suite Ecosystem
-- **Status:** T13.2 in progress — shared Core supervisor and global scheduler
+- **Status:** T13.3 in progress — real image OCR and DOCX export
 - **Released Version:** 1.5.0
 - **Target Version:** 1.6.0
 - **Last Updated:** 2026-08-21
@@ -23,7 +23,7 @@
 | 10 | Large PDF Reliability & Document Workflow UX | ✅ Complete | 87 backend tests + lint/build + 4 real Electron E2E pass |
 | 11 | Responsive Window UX | ✅ Complete | 820×700 geometry regression + lint/build + 5 Electron E2E pass |
 | 12 | Faithful PDF-to-Word Export | ✅ Complete | Pixel-identical page images + 94 backend tests + 6 Electron E2E pass |
-| 13 | Tini Suite Ecosystem | 🚧 In Progress | T13.1 complete (1/5); full Electron E2E 8/8 pass |
+| 13 | Tini Suite Ecosystem | 🚧 In Progress | T13.1–T13.2 complete (2/5); 95 backend tests + Electron E2E 8/8 pass |
 
 ## Phase 4 Task Detail
 | Task | Description | Status |
@@ -57,3 +57,4 @@
 - **2026-08-21:** Chốt target v1.6.0 thành Tini Suite: một bộ cài, hai product entry (Mark Tini và Tini OCR), một shared Electron host/Tini Core/runtime/model; không dùng Windows Service và không tạo GitHub Release.
 - **2026-08-21:** Chọn chiến lược OCR cần benchmark trước khi khóa: RapidOCR + OpenCV là candidate mặc định, EasyOCR là fallback/baseline, VietOCR chỉ là second pass có điều kiện; PaddleOCR/Surya không thuộc runtime mặc định v1.6.0.
 - **2026-08-21:** T13.1 hoàn tất: shared product bootstrap, Mark Tini adapter và Tini OCR shell; gỡ sạch bản cài v1.5.0 để giải phóng backend cũ, sau đó lint/build và Electron E2E 8/8 đạt.
+- **2026-08-21:** T13.2 hoàn tất: hai product dùng chung một Tini Core có lock/session/lease, tự phục hồi sau crash, last-client shutdown, migration copy-if-missing và global heavy-job scheduler; 95 backend tests + lint/build + Electron E2E 8/8 đạt.

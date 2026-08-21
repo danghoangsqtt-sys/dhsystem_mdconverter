@@ -1,11 +1,29 @@
 import path from 'node:path';
 import fs from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { test, expect, _electron as electron, type ElectronApplication, type Page } from '@playwright/test';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MAIN_ENTRY = path.resolve(__dirname, '..', 'dist-electron', 'main.cjs');
 const SAMPLE_PDF = path.resolve(__dirname, 'fixtures', 'sample.pdf');
+const CORE_DESCRIPTOR = path.join(process.env.APPDATA ?? '', 'Tini Suite', 'core', 'session.json');
+
+type CoreDescriptor = {
+  instanceId: string;
+  pid: number;
+  port: number;
+  token: string;
+};
+
+function processIsAlive(pid: number) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 // electron.launch() replaces the child's env entirely with whatever is
 // passed here (it does not merge with process.env), so build off a full
@@ -22,8 +40,8 @@ const electronEnv = Object.fromEntries(
 ) as Record<string, string>;
 
 // Drives the real, built Electron app (main + preload + renderer), which in
-// turn spawns the real Python backend as a child process (see main.ts's
-// startPythonBackend) - this is the same code path a real user hits, not a
+// turn attaches to the real shared Tini Core backend - this is the same code
+// path a real user hits, not a
 // mock of any layer. Run `npm run build` before this suite; there is
 // nothing here to fall back to a dev server.
 test.describe.serial('Mark Tini desktop app', () => {
@@ -241,14 +259,69 @@ test.describe('Tini Suite product boundaries', () => {
       electron.launch({ args: [MAIN_ENTRY, '--product=mark-tini'], env: electronEnv }),
       electron.launch({ args: [MAIN_ENTRY, '--product=tini-ocr'], env: electronEnv }),
     ]);
+    let markClosed = false;
+    let ocrClosed = false;
+    let corePid = 0;
     try {
       const [markPage, ocrPage] = await Promise.all([markApp.firstWindow(), ocrApp.firstWindow()]);
       await expect(markPage).toHaveTitle('Mark Tini');
       await expect(ocrPage).toHaveTitle('Tini OCR — Image to Text & Word');
       await expect(markPage.getByText('DHSystem').first()).toBeVisible();
       await expect(ocrPage.getByTestId('tini-ocr-shell')).toBeVisible();
+
+      const [markToken, ocrToken] = await Promise.all([
+        markPage.evaluate(() => window.documark?.apiToken),
+        ocrPage.evaluate(() => window.documark?.apiToken),
+      ]);
+      expect(markToken).toBeTruthy();
+      expect(ocrToken).toBe(markToken);
+
+      const descriptor = JSON.parse(fs.readFileSync(CORE_DESCRIPTOR, 'utf8')) as CoreDescriptor;
+      expect(descriptor.token).toBe(markToken);
+      expect(descriptor.port).toBe(8088);
+      expect(processIsAlive(descriptor.pid)).toBe(true);
+      corePid = descriptor.pid;
+
+      const stopped = spawnSync('taskkill', ['/pid', String(corePid), '/f', '/t'], {
+        windowsHide: true,
+        stdio: 'ignore',
+      });
+      expect(stopped.status).toBe(0);
+      await expect.poll(async () => {
+        try {
+          return await ocrPage.evaluate(async () => {
+            const response = await fetch('http://127.0.0.1:8088/api/health', {
+              headers: { 'X-DocuMark-Token': window.documark?.apiToken ?? '' },
+            });
+            return response.ok;
+          });
+        } catch {
+          return false;
+        }
+      }, { timeout: 30_000 }).toBe(true);
+      const recovered = JSON.parse(fs.readFileSync(CORE_DESCRIPTOR, 'utf8')) as CoreDescriptor;
+      expect(recovered.instanceId).toBe(descriptor.instanceId);
+      expect(recovered.pid).not.toBe(corePid);
+      corePid = recovered.pid;
+
+      await markApp.close();
+      markClosed = true;
+      const healthAfterMarkClosed = await ocrPage.evaluate(async () => {
+        const response = await fetch('http://127.0.0.1:8088/api/health', {
+          headers: { 'X-DocuMark-Token': window.documark?.apiToken ?? '' },
+        });
+        return response.ok;
+      });
+      expect(healthAfterMarkClosed).toBe(true);
+
+      await ocrApp.close();
+      ocrClosed = true;
+      await expect.poll(() => processIsAlive(corePid), { timeout: 10_000 }).toBe(false);
     } finally {
-      await Promise.all([ocrApp.close(), markApp.close()]);
+      await Promise.all([
+        ocrClosed ? Promise.resolve() : ocrApp.close(),
+        markClosed ? Promise.resolve() : markApp.close(),
+      ]);
     }
   });
 });

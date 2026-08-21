@@ -1,7 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import path from 'node:path';
 import { spawn, ChildProcess } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 // Default-import instead of `import { autoUpdater } from 'electron-updater'`:
 // electron-updater exports autoUpdater via a lazy Object.defineProperty
@@ -19,9 +18,9 @@ import fs from 'node:fs';
 // never lets it crash dev mode.
 import electronUpdater from 'electron-updater';
 import { PRODUCT_METADATA, productIdFromArguments } from '../src/shared/product';
+import { TiniCoreSupervisor } from './coreSupervisor';
 
-const API_TOKEN = randomBytes(32).toString('base64url');
-process.env.DOCUMARK_API_TOKEN = API_TOKEN;
+let API_TOKEN = '';
 const PRODUCT_ID = productIdFromArguments(process.argv);
 const PRODUCT = PRODUCT_METADATA[PRODUCT_ID];
 
@@ -88,21 +87,9 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL
   : RENDERER_DIST;
 
 let win: BrowserWindow | null;
-let pythonProcess: ChildProcess | null = null;
 let ollamaProcess: ChildProcess | null = null;
-
-// ─── Backend Crash-Restart State ──────────────────────────────
-// If the backend dies unexpectedly (crash, killed externally, etc.) we
-// respawn it with exponential backoff, up to a cap. `intentionalShutdown`
-// distinguishes our own deliberate kill (app quitting) from a real crash so
-// we don't try to restart a backend we just told to die. A process that
-// stays up for ~30s has its retry budget restored, so a flaky-but-mostly-ok
-// backend doesn't permanently exhaust its restart attempts.
-// ────────────────────────────────────────────────────────────────
-let intentionalShutdown = false;
-let restartAttempts = 0;
-const MAX_RESTART_ATTEMPTS = 5;
-let restartResetTimer: NodeJS.Timeout | null = null;
+let coreSupervisor: TiniCoreSupervisor | null = null;
+let shutdownStarted = false;
 
 // Safe logging helper — never throws even if stdout/stderr is broken
 function safeLog(...args: unknown[]) {
@@ -170,140 +157,6 @@ async function ensureOllama(): Promise<OllamaStartupStatus> {
     if (await isOllamaRunning()) return 'started';
   }
   return 'start_failed';
-}
-
-function startPythonBackend() {
-  const pythonCandidates = app.isPackaged
-    ? [path.join(PROJECT_ROOT, 'python_runtime', 'python.exe')]
-    : [
-        path.join(PROJECT_ROOT, 'docling-env', 'Scripts', 'python.exe'),
-        path.join(PROJECT_ROOT, 'python_runtime', 'python.exe'),
-      ];
-  const pythonExe = pythonCandidates.find(candidate => fs.existsSync(candidate));
-  const runServerScript = path.join(PROJECT_ROOT, 'backend', 'run_server.py');
-  const offlineModelsPath = path.join(PROJECT_ROOT, 'offline_models');
-  const userDataPath = path.join(app.getPath('userData'), 'data');
-
-  safeLog('─── Mark Tini Backend ───');
-  safeLog(`  Project Root : ${PROJECT_ROOT}`);
-  safeLog(`  Python Exe   : ${pythonExe ?? '(not found)'}`);
-  safeLog(`  Script       : ${runServerScript}`);
-  safeLog(`  Data Dir     : ${userDataPath}`);
-  safeLog(`  Packaged     : ${app.isPackaged}`);
-
-  // Validate paths before spawning
-  if (!pythonExe) {
-    safeLog(`[FATAL] Python executable not found. Checked: ${pythonCandidates.join(', ')}`);
-    dialog.showErrorBox(
-      'Mark Tini - Backend Not Found',
-      `Không tìm thấy Python runtime.\n\nĐã kiểm tra:\n${pythonCandidates.join('\n')}\n\nHãy chạy script chuẩn bị offline bundle trước khi đóng gói.`
-    );
-    return;
-  }
-
-  if (app.isPackaged && !fs.existsSync(offlineModelsPath)) {
-    safeLog(`[FATAL] Offline models not found: ${offlineModelsPath}`);
-    dialog.showErrorBox(
-      'Mark Tini - Offline Models Not Found',
-      `Không tìm thấy model AI offline tại:\n${offlineModelsPath}\n\nBản cài đặt chưa được build đúng quy trình.`
-    );
-    return;
-  }
-
-  if (!fs.existsSync(runServerScript)) {
-    safeLog(`[FATAL] Server script not found: ${runServerScript}`);
-    dialog.showErrorBox(
-      'Mark Tini - Server Script Not Found',
-      `Không tìm thấy file server:\n${runServerScript}`
-    );
-    return;
-  }
-
-  const backendEnvironment: NodeJS.ProcessEnv = {
-    ...process.env,
-    DOCUMARK_API_TOKEN: API_TOKEN,
-    DOCUMARK_DATA_DIR: userDataPath,
-  };
-  if (app.isPackaged) {
-    backendEnvironment.DOCUMARK_OFFLINE_MODE = '1';
-    backendEnvironment.DOCLING_ARTIFACTS_PATH = offlineModelsPath;
-    backendEnvironment.DOCUMARK_TRANSLATION_MODEL_PATH = path.join(offlineModelsPath, 'translation');
-    backendEnvironment.HF_HUB_OFFLINE = '1';
-    backendEnvironment.TRANSFORMERS_OFFLINE = '1';
-    backendEnvironment.PYTHONNOUSERSITE = '1';
-  }
-
-  pythonProcess = spawn(pythonExe, ['-s', runServerScript], {
-    cwd: PROJECT_ROOT,
-    detached: false,
-    stdio: ['ignore', 'pipe', 'pipe'],
-    env: backendEnvironment,
-    windowsHide: true,
-  });
-
-  pythonProcess.stdout?.on('data', (data) => {
-    safeLog(`[Backend] ${data}`);
-  });
-
-  // Use safeLog instead of console.error to avoid EPIPE crashes
-  pythonProcess.stderr?.on('data', (data) => {
-    safeLog(`[Backend ERR] ${data}`);
-  });
-
-  // Prevent stream errors from crashing the app
-  pythonProcess.stdout?.on('error', () => {});
-  pythonProcess.stderr?.on('error', () => {});
-
-  pythonProcess.on('error', (err) => {
-    safeLog(`[Backend SPAWN ERROR] ${err.message}`);
-    dialog.showErrorBox(
-      'Mark Tini - Lỗi khởi động Backend',
-      `Không thể khởi chạy máy chủ Python:\n${err.message}`
-    );
-  });
-
-  pythonProcess.on('spawn', () => {
-    // Process survived long enough to be considered stable — restore its
-    // full restart budget so an occasional crash long after startup isn't
-    // penalized by attempts spent during an earlier rough patch.
-    if (restartResetTimer) clearTimeout(restartResetTimer);
-    restartResetTimer = setTimeout(() => {
-      restartAttempts = 0;
-      safeLog('[Backend] Stable for 30s — restart budget reset.');
-    }, 30000);
-  });
-
-  pythonProcess.on('close', (code) => {
-    safeLog(`[Backend] process exited with code ${code}`);
-    pythonProcess = null;
-
-    if (intentionalShutdown) {
-      return;
-    }
-
-    if (restartResetTimer) {
-      clearTimeout(restartResetTimer);
-      restartResetTimer = null;
-    }
-
-    if (restartAttempts >= MAX_RESTART_ATTEMPTS) {
-      safeLog(`[Backend] Giving up after ${restartAttempts} restart attempts.`);
-      dialog.showErrorBox(
-        'Mark Tini - Backend liên tục gặp sự cố',
-        `Máy chủ xử lý đã dừng đột ngột ${restartAttempts} lần liên tiếp và sẽ không tự khởi động lại nữa.\n\nVui lòng khởi động lại ứng dụng. Nếu sự cố tiếp diễn, hãy kiểm tra log để biết chi tiết.`
-      );
-      return;
-    }
-
-    restartAttempts += 1;
-    const delayMs = Math.min(1000 * 2 ** (restartAttempts - 1), 30000);
-    safeLog(`[Backend] Unexpected exit — restarting in ${delayMs}ms (attempt ${restartAttempts}/${MAX_RESTART_ATTEMPTS})`);
-    setTimeout(() => {
-      if (!intentionalShutdown) {
-        startPythonBackend();
-      }
-    }, delayMs);
-  });
 }
 
 function createWindow() {
@@ -410,21 +263,10 @@ ipcMain.handle(
 // service, but cannot choose an executable or pass arbitrary arguments.
 ipcMain.handle('ensure-ollama', async (): Promise<OllamaStartupStatus> => ensureOllama());
 
-app.on('window-all-closed', () => {
-  intentionalShutdown = true;
-  if (pythonProcess) {
-    safeLog('Killing python backend process...');
-    try {
-      // On Windows, SIGTERM may not work. Use taskkill instead.
-      if (process.platform === 'win32' && pythonProcess.pid) {
-        spawn('taskkill', ['/pid', String(pythonProcess.pid), '/f', '/t'], { windowsHide: true });
-      } else {
-        pythonProcess.kill('SIGTERM');
-      }
-    } catch (e) {
-      safeLog('Error killing backend:', e);
-    }
-  }
+async function shutdownApplication() {
+  if (shutdownStarted) return;
+  shutdownStarted = true;
+
   if (ollamaProcess?.pid) {
     try {
       spawn('taskkill', ['/pid', String(ollamaProcess.pid), '/f', '/t'], { windowsHide: true });
@@ -432,9 +274,26 @@ app.on('window-all-closed', () => {
       safeLog('Error stopping Ollama started by Mark Tini:', e);
     }
   }
-  if (process.platform !== 'darwin') {
-    app.quit();
-    win = null;
+
+  try {
+    await coreSupervisor?.dispose();
+  } catch (error) {
+    safeLog(`[Tini Core] Shutdown failed: ${error instanceof Error ? error.message : error}`);
+  }
+
+  coreSupervisor = null;
+  win = null;
+  app.quit();
+}
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') void shutdownApplication();
+});
+
+app.on('before-quit', (event) => {
+  if (!shutdownStarted && coreSupervisor) {
+    event.preventDefault();
+    void shutdownApplication();
   }
 });
 
@@ -444,11 +303,30 @@ app.on('activate', () => {
   }
 });
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   app.setAppUserModelId(PRODUCT.appUserModelId);
-  // Tini OCR is a product shell in T13.1. It attaches to the shared Core in
-  // T13.2; until then it must not start a competing backend on the fixed port.
-  if (PRODUCT_ID === 'mark-tini') startPythonBackend();
+  coreSupervisor = new TiniCoreSupervisor({
+    appDataDir: app.getPath('appData'),
+    legacyUserDataDir: app.getPath('userData'),
+    projectRoot: PROJECT_ROOT,
+    productId: PRODUCT_ID,
+    packaged: app.isPackaged,
+    log: safeLog,
+  });
+
+  try {
+    const session = await coreSupervisor.connect();
+    API_TOKEN = session.token;
+    process.env.DOCUMARK_API_TOKEN = API_TOKEN;
+  } catch (error) {
+    shutdownStarted = true;
+    const message = error instanceof Error ? error.message : String(error);
+    safeLog(`[Tini Core] Startup failed: ${message}`);
+    dialog.showErrorBox(`${PRODUCT.name} - Tini Core`, message);
+    app.exit(1);
+    return;
+  }
+
   // Show the window immediately rather than guessing how long the backend
   // needs — the renderer polls /api/health itself and shows real startup
   // progress (model loading can take much longer than any fixed delay,

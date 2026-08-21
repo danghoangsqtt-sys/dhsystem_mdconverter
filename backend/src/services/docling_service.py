@@ -15,6 +15,7 @@ from docling.datamodel.base_models import ConversionStatus, InputFormat
 from docling.datamodel.pipeline_options import PdfPipelineOptions, TableFormerMode, EasyOcrOptions
 
 from .markdown_cleaner import clean_markdown
+from .resource_scheduler import heavy_job_slot
 
 # Set up simple logging
 logging.basicConfig(level=logging.INFO)
@@ -57,7 +58,6 @@ PDF_FALLBACK_MAX_DIMENSION = 2200
 # default combination is warmed up eagerly at startup (see warm_up_models).
 _converter_cache: dict[tuple[str, str], DocumentConverter] = {}
 _cache_lock = threading.Lock()
-_conversion_lock = threading.Lock()
 _region_reader_cache: dict[str, Any] = {}
 _region_reader_lock = threading.Lock()
 
@@ -444,7 +444,7 @@ def convert_document_to_markdown(
             # DocumentConverter pipelines hold native/ML state and are not treated
             # as thread-safe. The API job queue is also single-worker, but this lock
             # protects direct library callers and startup/request overlap.
-            with _conversion_lock:
+            with heavy_job_slot("docling-conversion"):
                 if resolved_processing_path.suffix.lower() == ".pdf":
                     raw_markdown = _convert_pdf_in_chunks(
                         converter,

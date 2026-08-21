@@ -33,6 +33,7 @@ from .config import settings
 from .logging_utils import CorrelationIdMiddleware, configure_logging
 from .services import citation_service, history_service, translation_service
 from .services import pdf_to_word_service
+from .services.resource_scheduler import heavy_job_slot
 from .services.docling_service import (
     DEFAULT_OCR_LANG,
     DEFAULT_TABLE_MODE,
@@ -179,12 +180,9 @@ job_manager = ConversionJobManager(
     max_history_entries=settings.max_history_entries,
     max_job_records=settings.max_job_records,
 )
-pdf_to_word_export_lock = threading.Lock()
-
-
 def _convert_pdf_to_word_serialized(pdf_path: Path, output_path: Path) -> pdf_to_word_service.PdfToWordResult:
     """Avoid multiple large raster exports competing for memory at once."""
-    with pdf_to_word_export_lock:
+    with heavy_job_slot("pdf-to-word"):
         return pdf_to_word_service.convert_pdf_to_docx(pdf_path, output_path)
 
 

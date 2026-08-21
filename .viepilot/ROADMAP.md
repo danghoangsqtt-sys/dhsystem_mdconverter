@@ -196,7 +196,7 @@
 
 ---
 
-## Phase 13: Tini Suite Ecosystem 🧭 PLANNED
+## Phase 13: Tini Suite Ecosystem 🚧 IN PROGRESS
 
 **Mục tiêu:** Chuyển sản phẩm thành một hệ sinh thái desktop local-first gồm **Mark Tini — Document Studio** và **Tini OCR — Image to Text & Word**, cài bằng một bộ setup và dùng chung Tini Core/runtime/model.
 
@@ -209,14 +209,14 @@
 ### Tasks
 
 - [x] **T13.1** Shared Electron host và ranh giới hai product — lint/build + Electron E2E 8/8 pass.
-- [ ] **T13.2** Một Tini Core dùng chung, client heartbeat, graceful shutdown và global resource scheduler.
+- [x] **T13.2** Một Tini Core dùng chung, client heartbeat, crash recovery, graceful shutdown và global resource scheduler — 95 backend tests + Electron E2E 8/8 pass.
 - [ ] **T13.3** Pipeline ảnh điện thoại → preprocessing → OCR → review → TXT/Markdown/DOCX.
 - [ ] **T13.4** Một installer offline, hai shortcut, không duplicate runtime/model.
 - [ ] **T13.5** Migration v1.5.0, OCR benchmark, regression và clean-machine release gates.
 
 ### Release gates
 
-- [ ] Hai product mở đồng thời nhưng chỉ có một Core; không còn process mồ côi sau khi đóng.
+- [x] Hai product mở đồng thời nhưng chỉ có một Core; không còn process mồ côi sau khi đóng.
 - [ ] OCR candidate vượt EasyOCR baseline theo quality gate đã khóa.
 - [ ] Installer/installed layout chỉ chứa một bản runtime và từng model artifact.
 - [ ] Upgrade từ v1.5.0 giữ history/cấu hình; offline clean-machine smoke đạt.

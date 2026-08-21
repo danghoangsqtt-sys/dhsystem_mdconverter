@@ -3,25 +3,26 @@
   "timestamp": "2026-08-21T08:12:00+07:00",
   "phase": "13",
   "phase_name": "Tini Suite Ecosystem",
-  "task": "T13.2 Shared Tini Core lifecycle",
+  "task": "T13.3 Tini OCR pipeline",
   "total_tasks": 5,
   "status": "in_progress",
   "completed_tasks": [
-    "T13.1 shared host and product boundaries — lint/build and Electron E2E 8/8 pass"
+    "T13.1 shared host and product boundaries — lint/build and Electron E2E 8/8 pass",
+    "T13.2 shared Tini Core lifecycle — 95 backend tests, lint/build and Electron E2E 8/8 pass"
   ],
   "remaining_tasks": [
-    "Implement T13.2 shared Core discovery, client lifecycle and stale recovery",
-    "Implement T13.3-T13.5 OCR, installer and release gates"
+    "Implement T13.3 real image OCR, review and export",
+    "Implement T13.4-T13.5 installer and release gates"
   ],
   "blockers": [],
   "human_actions_pending": [],
   "decisions": [
     "Use one allowlisted shared Electron host with --product=mark-tini or --product=tini-ocr",
     "Keep Mark Tini App.tsx behavior unchanged behind a product adapter",
-    "Do not start a second backend from the Tini OCR shell before T13.2",
+    "Both products attach to one token-authenticated Tini Core session with crash recovery",
     "Do not terminate the user's installed app automatically"
   ],
   "uncommitted_files": [],
-  "next_action": "Complete the T13.2 doc-first contract and implement shared Core lifecycle",
-  "context_notes": "The installed v1.5.0 application and backend were removed with the official uninstaller while user history was preserved. With port 8088 clean, all 8 Electron E2E tests pass."
+  "next_action": "Complete the T13.3 doc-first contract and implement the real offline image OCR pipeline",
+  "context_notes": "T13.2 is complete. Mark Tini and Tini OCR share one Core, recover the Core after a forced crash, keep the surviving client healthy, and stop Core after the last client exits. Backend 95/95 and Electron E2E 8/8 pass."
 }
