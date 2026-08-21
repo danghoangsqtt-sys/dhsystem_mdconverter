@@ -50,7 +50,7 @@ export default function TiniOcrApp() {
     <div className="ocr-app" data-testid="tini-ocr-shell">
       <header className="ocr-header">
         <div className="ocr-brand">
-          <div className="ocr-brand-icon" aria-hidden="true"><ScanText size={22} /></div>
+          <img className="ocr-brand-icon" src="/tini-ocr.png" alt="" aria-hidden="true" />
           <div>
             <p className="ocr-eyebrow">Tini Suite</p>
             <h1>Tini OCR</h1>

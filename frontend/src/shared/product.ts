@@ -19,7 +19,7 @@ export const PRODUCT_METADATA: Record<ProductId, ProductMetadata> = {
     name: 'Mark Tini',
     windowTitle: 'Mark Tini',
     appUserModelId: 'com.dhsystem.tinisuite.marktini',
-    iconFile: 'favicon.png',
+    iconFile: 'mark-tini.png',
     storageNamespace: 'mark-tini',
   },
   'tini-ocr': {
@@ -27,7 +27,7 @@ export const PRODUCT_METADATA: Record<ProductId, ProductMetadata> = {
     name: 'Tini OCR',
     windowTitle: 'Tini OCR — Image to Text & Word',
     appUserModelId: 'com.dhsystem.tinisuite.ocr',
-    iconFile: 'tini-ocr.svg',
+    iconFile: 'tini-ocr.png',
     storageNamespace: 'tini-ocr',
   },
 };

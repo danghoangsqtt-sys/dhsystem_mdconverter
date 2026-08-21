@@ -25,8 +25,8 @@
 .ocr-brand { display: flex; align-items: center; gap: 12px; }
 .ocr-brand h1, .ocr-section-heading h2 { margin: 0; font-size: 20px; line-height: 1.2; }
 .ocr-brand-icon {
-  width: 42px; height: 42px; display: grid; place-items: center;
-  color: #fff; background: linear-gradient(145deg, #2667e8, #1647ad); border-radius: 12px;
+  width: 42px; height: 42px; display: block; object-fit: cover;
+  background: #0b3b9d; border-radius: 12px;
   box-shadow: 0 8px 22px rgba(27, 83, 185, 0.24);
 }
 .ocr-eyebrow { margin: 0 0 3px; color: #6b7890; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
