@@ -3,6 +3,9 @@ Tất cả các thay đổi của dự án sẽ được cập nhật tại đâ
 
 ## [Unreleased]
 
+### Planned
+- **Tini Suite v1.6.0:** Hoàn tất SPEC/PLAN cho một bộ cài offline có hai product entry: **Mark Tini — Document Studio** và **Tini OCR — Image to Text & Word**, dùng chung Electron host, Tini Core, Python runtime và model store. Chưa thay đổi phiên bản runtime/package và chưa phát hành chức năng này.
+
 ## [1.5.0] — 2026-08-21
 
 ### Added

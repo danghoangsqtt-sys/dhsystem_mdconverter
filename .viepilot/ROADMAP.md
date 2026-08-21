@@ -193,3 +193,31 @@
 - [x] Thêm API có token, content sniffing, giới hạn upload, serialization và cleanup đầy đủ.
 - [x] Thêm nút xuất Word từ PDF đang mở/PDF lịch sử và hộp thoại lưu native chọn được USB.
 - [x] Kiểm chứng pixel-identical, PDF dọc/ngang, 94 backend tests, lint/build, React Doctor và 6 Electron E2E.
+
+---
+
+## Phase 13: Tini Suite Ecosystem 🧭 PLANNED
+
+**Mục tiêu:** Chuyển sản phẩm thành một hệ sinh thái desktop local-first gồm **Mark Tini — Document Studio** và **Tini OCR — Image to Text & Word**, cài bằng một bộ setup và dùng chung Tini Core/runtime/model.
+
+**Target version:** v1.6.0
+
+**SPEC:** `.viepilot/phases/phase-13-tini-suite-ecosystem/SPEC.md`
+
+**PLAN:** `.viepilot/phases/phase-13-tini-suite-ecosystem/PLAN.md`
+
+### Tasks
+
+- [ ] **T13.1** Shared Electron host và ranh giới hai product.
+- [ ] **T13.2** Một Tini Core dùng chung, client heartbeat, graceful shutdown và global resource scheduler.
+- [ ] **T13.3** Pipeline ảnh điện thoại → preprocessing → OCR → review → TXT/Markdown/DOCX.
+- [ ] **T13.4** Một installer offline, hai shortcut, không duplicate runtime/model.
+- [ ] **T13.5** Migration v1.5.0, OCR benchmark, regression và clean-machine release gates.
+
+### Release gates
+
+- [ ] Hai product mở đồng thời nhưng chỉ có một Core; không còn process mồ côi sau khi đóng.
+- [ ] OCR candidate vượt EasyOCR baseline theo quality gate đã khóa.
+- [ ] Installer/installed layout chỉ chứa một bản runtime và từng model artifact.
+- [ ] Upgrade từ v1.5.0 giữ history/cấu hình; offline clean-machine smoke đạt.
+- [ ] Toàn bộ regression Mark Tini đạt trước khi bump metadata lên v1.6.0.

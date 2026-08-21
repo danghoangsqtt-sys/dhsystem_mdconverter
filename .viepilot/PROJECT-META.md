@@ -1,10 +1,12 @@
 # Thông Tin Dự Án (Project Meta)
 
 ## Project Info
-- **Project Name:** Mark Tini (Local Markdown Converter)
+- **Project Name:** Tini Suite
 - **Short Name:** markdown_convert
-- **Description:** Ứng dụng local chuyển đổi PDF/DOCX/PPTX/HTML/ảnh sang Markdown chất lượng cao dùng Docling, tối ưu cho AI đọc. Có giao diện editor chuyên nghiệp (MDEditor).
-- **Version:** 1.3.2
+- **Products:** Mark Tini — Document Studio; Tini OCR — Image to Text & Word (planned)
+- **Description:** Hệ sinh thái desktop local-first cho chuyển đổi tài liệu, OCR ảnh điện thoại và xuất TXT/Markdown/DOCX; dùng chung Tini Core/runtime/model và một bộ cài offline.
+- **Released Version:** 1.5.0
+- **Target Version:** 1.6.0
 - **Inception Year:** 2026
 - **License:** MIT
 - **Repository:** https://github.com/danghoangsqtt-sys/dhsystem_mdconverter

@@ -1,4 +1,4 @@
-# Kiến trúc hệ thống — v1.5
+# Kiến trúc hệ thống — v1.5 hiện tại / v1.6 mục tiêu
 
 ## 1. Tổng quan
 
@@ -74,3 +74,48 @@ Docling chạy trong thread nên không thể hard-cancel an toàn. Với job đ
 ## 6. Deployment/offline
 
 `electron-builder` đóng `backend/`, `python_runtime/` và `offline_models/` vào resources. Electron chạy Python bằng `-s` và đặt `DOCUMARK_OFFLINE_MODE`, `DOCLING_ARTIFACTS_PATH`, `HF_HUB_OFFLINE`, `TRANSFORMERS_OFFLINE`, `PYTHONNOUSERSITE`. Preflight khởi tạo pipeline với các cờ này; smoke gate có thể chuyển một PDF thật trước khi build installer.
+
+## 7. Kiến trúc mục tiêu v1.6 — Tini Suite
+
+Phần này là kiến trúc đã quyết định cho Phase 13 nhưng chưa được triển khai. Kiến trúc v1.5 ở trên vẫn là source of truth cho runtime đang phát hành.
+
+```mermaid
+flowchart LR
+    A[Mark Tini shortcut] --> H[Shared Electron host]
+    B[Tini OCR shortcut] --> H
+    H --> MR[Mark Tini renderer]
+    H --> OR[Tini OCR renderer]
+    MR -->|session token| C[Tini Core]
+    OR -->|session token| C
+    C --> Q[Global heavy-job scheduler]
+    Q --> D[Docling / PDF services]
+    Q --> O[Image preprocessing + OCR]
+    C --> S[Namespaced shared storage]
+    C --> M[Single runtime/model store]
+```
+
+### 7.1. Product boundary
+
+- Một Electron/Vite project và một host binary được giữ để không nhân đôi framework/runtime.
+- Hai shortcut truyền `--product=mark-tini|tini-ocr`; mỗi product có renderer root, icon, title, settings và history namespace riêng.
+- Shared UI/contract/bridge nằm ở lớp dùng chung. Product module không phụ thuộc trực tiếp vào implementation của product còn lại.
+
+### 7.2. Core ownership
+
+- Product đầu tiên giành atomic lock, khởi động Core và công bố descriptor gồm PID, endpoint và session token trong user-scoped data directory.
+- Product sau xác minh cả PID lẫn health endpoint trước khi attach; stale descriptor được thu hồi có kiểm soát.
+- Client lease/heartbeat quyết định lifetime. Core tự thoát sau grace period khi client cuối rời đi; không dùng Windows Service.
+- Global scheduler mặc định chỉ cho một workload ML nặng chạy để Docling và OCR không tranh bộ nhớ.
+
+### 7.3. OCR boundary
+
+- Preprocessing là bước riêng, không ghi đè ảnh gốc và lưu recipe để tái hiện.
+- OCR result dùng cấu trúc page/block/line/normalized box/confidence/text, tách khỏi từng engine cụ thể.
+- RapidOCR/ONNX chỉ trở thành default sau benchmark/license/bundle gate; EasyOCR luôn là baseline/fallback trong kế hoạch v1.6.
+- DOCX editable và DOCX image-faithful là hai exporter khác nhau với cam kết khác nhau.
+
+### 7.4. Packaging invariant
+
+- Installer tạo hai product entry nhưng chỉ có một uninstall entry.
+- Python runtime và mỗi model artifact chỉ tồn tại một lần trong installed resources.
+- Upgrade từ Mark Tini v1.5.0 phải migrate storage idempotent và giữ dữ liệu người dùng.

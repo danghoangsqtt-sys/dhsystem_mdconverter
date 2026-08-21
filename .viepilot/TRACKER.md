@@ -1,9 +1,10 @@
 # Theo Dõi Tiến Độ (Tracker)
 
 ## Current State
-- **Current Phase:** Phase 12 — Faithful PDF-to-Word Export
-- **Status:** v1.5.0 implemented, packaged, installed and smoke-tested locally
-- **Version:** 1.5.0
+- **Current Phase:** Phase 13 — Tini Suite Ecosystem
+- **Status:** T13.1 in progress — shared host and product boundaries
+- **Released Version:** 1.5.0
+- **Target Version:** 1.6.0
 - **Last Updated:** 2026-08-21
 
 ## Phase Progress
@@ -22,6 +23,7 @@
 | 10 | Large PDF Reliability & Document Workflow UX | ✅ Complete | 87 backend tests + lint/build + 4 real Electron E2E pass |
 | 11 | Responsive Window UX | ✅ Complete | 820×700 geometry regression + lint/build + 5 Electron E2E pass |
 | 12 | Faithful PDF-to-Word Export | ✅ Complete | Pixel-identical page images + 94 backend tests + 6 Electron E2E pass |
+| 13 | Tini Suite Ecosystem | 🚧 In Progress | T13.1 shared host/product boundaries in progress |
 
 ## Phase 4 Task Detail
 | Task | Description | Status |
@@ -52,3 +54,5 @@
 - **2026-08-21:** Đã tạo bộ cài offline v1.4.1, cài đè thành công (exit code 0), xác minh executable/app.asar cùng phiên bản và smoke-test bản cài đạt
 - **2026-08-21:** Hoàn tất Phase 12: xuất toàn bộ PDF sang Word bằng ảnh lossless toàn trang, giữ đúng khổ/hướng trang, lưu native qua hộp thoại Electron; ảnh nhúng khớp từng pixel với PDF mẫu, 94 backend tests + lint/build + 6 Electron E2E đạt
 - **2026-08-21:** NSIS 1.5.0 build/cài đặt local đạt; installer, executable và app.asar cùng phiên bản 1.5.0, ứng dụng đã cài khởi động và phản hồi bình thường
+- **2026-08-21:** Chốt target v1.6.0 thành Tini Suite: một bộ cài, hai product entry (Mark Tini và Tini OCR), một shared Electron host/Tini Core/runtime/model; không dùng Windows Service và không tạo GitHub Release.
+- **2026-08-21:** Chọn chiến lược OCR cần benchmark trước khi khóa: RapidOCR + OpenCV là candidate mặc định, EasyOCR là fallback/baseline, VietOCR chỉ là second pass có điều kiện; PaddleOCR/Surya không thuộc runtime mặc định v1.6.0.
