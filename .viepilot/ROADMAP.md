@@ -208,7 +208,7 @@
 
 ### Tasks
 
-- [ ] **T13.1** Shared Electron host và ranh giới hai product.
+- [x] **T13.1** Shared Electron host và ranh giới hai product — lint/build + Electron E2E 8/8 pass.
 - [ ] **T13.2** Một Tini Core dùng chung, client heartbeat, graceful shutdown và global resource scheduler.
 - [ ] **T13.3** Pipeline ảnh điện thoại → preprocessing → OCR → review → TXT/Markdown/DOCX.
 - [ ] **T13.4** Một installer offline, hai shortcut, không duplicate runtime/model.

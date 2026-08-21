@@ -2,7 +2,7 @@
 
 ## Current State
 - **Current Phase:** Phase 13 — Tini Suite Ecosystem
-- **Status:** T13.1 verification control point — product smoke 3/3 pass; installed Mark Tini is holding port 8088 for full regression
+- **Status:** T13.1 complete — ready for T13.2 shared Core lifecycle
 - **Released Version:** 1.5.0
 - **Target Version:** 1.6.0
 - **Last Updated:** 2026-08-21
@@ -23,7 +23,7 @@
 | 10 | Large PDF Reliability & Document Workflow UX | ✅ Complete | 87 backend tests + lint/build + 4 real Electron E2E pass |
 | 11 | Responsive Window UX | ✅ Complete | 820×700 geometry regression + lint/build + 5 Electron E2E pass |
 | 12 | Faithful PDF-to-Word Export | ✅ Complete | Pixel-identical page images + 94 backend tests + 6 Electron E2E pass |
-| 13 | Tini Suite Ecosystem | 🚧 In Progress | T13.1 shared host/product boundaries in progress |
+| 13 | Tini Suite Ecosystem | 🚧 In Progress | T13.1 complete (1/5); full Electron E2E 8/8 pass |
 
 ## Phase 4 Task Detail
 | Task | Description | Status |
@@ -56,3 +56,4 @@
 - **2026-08-21:** NSIS 1.5.0 build/cài đặt local đạt; installer, executable và app.asar cùng phiên bản 1.5.0, ứng dụng đã cài khởi động và phản hồi bình thường
 - **2026-08-21:** Chốt target v1.6.0 thành Tini Suite: một bộ cài, hai product entry (Mark Tini và Tini OCR), một shared Electron host/Tini Core/runtime/model; không dùng Windows Service và không tạo GitHub Release.
 - **2026-08-21:** Chọn chiến lược OCR cần benchmark trước khi khóa: RapidOCR + OpenCV là candidate mặc định, EasyOCR là fallback/baseline, VietOCR chỉ là second pass có điều kiện; PaddleOCR/Surya không thuộc runtime mặc định v1.6.0.
+- **2026-08-21:** T13.1 hoàn tất: shared product bootstrap, Mark Tini adapter và Tini OCR shell; gỡ sạch bản cài v1.5.0 để giải phóng backend cũ, sau đó lint/build và Electron E2E 8/8 đạt.

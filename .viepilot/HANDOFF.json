@@ -1,22 +1,20 @@
 {
   "version": "1.0",
-  "timestamp": "2026-08-21T08:04:07+07:00",
+  "timestamp": "2026-08-21T08:12:00+07:00",
   "phase": "13",
   "phase_name": "Tini Suite Ecosystem",
-  "task": "T13.1 Shared host and product boundaries",
+  "task": "T13.2 Shared Tini Core lifecycle",
   "total_tasks": 5,
-  "status": "verification_control_point",
-  "completed_tasks": [],
+  "status": "in_progress",
+  "completed_tasks": [
+    "T13.1 shared host and product boundaries — lint/build and Electron E2E 8/8 pass"
+  ],
   "remaining_tasks": [
-    "Rerun full Electron regression after port 8088 is available",
-    "Mark T13.1 complete and continue with T13.2 shared Core lifecycle"
+    "Implement T13.2 shared Core discovery, client lifecycle and stale recovery",
+    "Implement T13.3-T13.5 OCR, installer and release gates"
   ],
-  "blockers": [
-    "Installed Mark Tini process PID 10284 and backend PID 5800 currently own the fixed local backend endpoint; source E2E receives HTTP 401 due to session-token isolation"
-  ],
-  "human_actions_pending": [
-    "Save any open document and close the installed Mark Tini application"
-  ],
+  "blockers": [],
+  "human_actions_pending": [],
   "decisions": [
     "Use one allowlisted shared Electron host with --product=mark-tini or --product=tini-ocr",
     "Keep Mark Tini App.tsx behavior unchanged behind a product adapter",
@@ -24,6 +22,6 @@
     "Do not terminate the user's installed app automatically"
   ],
   "uncommitted_files": [],
-  "next_action": "After installed Mark Tini is closed, run npm run test:e2e from frontend",
-  "context_notes": "Lint and build pass. Three product-boundary Electron smoke tests pass, including concurrent Mark Tini and Tini OCR windows. Full Mark Tini regression is paused only because the installed application is still running on port 8088."
+  "next_action": "Complete the T13.2 doc-first contract and implement shared Core lifecycle",
+  "context_notes": "The installed v1.5.0 application and backend were removed with the official uninstaller while user history was preserved. With port 8088 clean, all 8 Electron E2E tests pass."
 }
