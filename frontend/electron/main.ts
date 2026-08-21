@@ -18,9 +18,12 @@ import fs from 'node:fs';
 // keeps that access exactly where it's meaningful (a packaged build) and
 // never lets it crash dev mode.
 import electronUpdater from 'electron-updater';
+import { PRODUCT_METADATA, productIdFromArguments } from '../src/shared/product';
 
 const API_TOKEN = randomBytes(32).toString('base64url');
 process.env.DOCUMARK_API_TOKEN = API_TOKEN;
+const PRODUCT_ID = productIdFromArguments(process.argv);
+const PRODUCT = PRODUCT_METADATA[PRODUCT_ID];
 
 // ─── Global EPIPE Guard ────────────────────────────────────────
 // In packaged mode there is no console attached. Writing to
@@ -35,7 +38,7 @@ process.on('uncaughtException', (err) => {
   // For all other uncaught exceptions, show an error dialog
   try {
     dialog.showErrorBox(
-      'Mark Tini - Unexpected Error',
+      `${PRODUCT.name} - Unexpected Error`,
       `${err.name}: ${err.message}\n\n${err.stack}`
     );
   } catch {
@@ -307,14 +310,17 @@ function createWindow() {
   win = new BrowserWindow({
     width: 1200,
     height: 800,
-    title: 'Mark Tini',
-    icon: path.join(process.env.VITE_PUBLIC!, 'favicon.png'),
+    title: PRODUCT.windowTitle,
+    icon: path.join(process.env.VITE_PUBLIC!, PRODUCT.iconFile),
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true,
-      additionalArguments: [`--documark-api-token=${API_TOKEN}`],
+      additionalArguments: [
+        `--documark-api-token=${API_TOKEN}`,
+        `--product=${PRODUCT_ID}`,
+      ],
     },
   });
 
@@ -335,10 +341,14 @@ function createWindow() {
   });
 
   if (VITE_DEV_SERVER_URL) {
-    win.loadURL(VITE_DEV_SERVER_URL);
+    const rendererUrl = new URL(VITE_DEV_SERVER_URL);
+    rendererUrl.searchParams.set('product', PRODUCT_ID);
+    win.loadURL(rendererUrl.toString());
     win.webContents.openDevTools();
   } else {
-    win.loadFile(path.join(RENDERER_DIST, 'index.html'));
+    win.loadFile(path.join(RENDERER_DIST, 'index.html'), {
+      query: { product: PRODUCT_ID },
+    });
   }
 }
 
@@ -435,7 +445,10 @@ app.on('activate', () => {
 });
 
 app.whenReady().then(() => {
-  startPythonBackend();
+  app.setAppUserModelId(PRODUCT.appUserModelId);
+  // Tini OCR is a product shell in T13.1. It attaches to the shared Core in
+  // T13.2; until then it must not start a competing backend on the fixed port.
+  if (PRODUCT_ID === 'mark-tini') startPythonBackend();
   // Show the window immediately rather than guessing how long the backend
   // needs — the renderer polls /api/health itself and shows real startup
   // progress (model loading can take much longer than any fixed delay,

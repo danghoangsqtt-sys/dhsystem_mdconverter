@@ -1,32 +1,29 @@
 {
   "version": "1.0",
-  "timestamp": "2026-05-18T14:24:00+07:00",
-  "phase": "UI Polish & Bug Fixes",
-  "phase_name": "UI Polish & Bug Fixes",
-  "task": "Sidebar enhancements",
-  "total_tasks": "N/A",
-  "status": "paused",
-  "completed_tasks": [
-    "Fixed MDEditor ghost text bug (EPIPE in packaged app)",
-    "Enhanced Sidebar with Publisher Info",
-    "Removed redundant Reprocess PDF button",
-    "Built and packaged version 1.0.0"
-  ],
+  "timestamp": "2026-08-21T08:04:07+07:00",
+  "phase": "13",
+  "phase_name": "Tini Suite Ecosystem",
+  "task": "T13.1 Shared host and product boundaries",
+  "total_tasks": 5,
+  "status": "verification_control_point",
+  "completed_tasks": [],
   "remaining_tasks": [
-    "Wait for user testing and feedback on the latest build"
+    "Rerun full Electron regression after port 8088 is available",
+    "Mark T13.1 complete and continue with T13.2 shared Core lifecycle"
   ],
-  "blockers": [],
+  "blockers": [
+    "Installed Mark Tini process PID 10284 and backend PID 5800 currently own the fixed local backend endpoint; source E2E receives HTTP 401 due to session-token isolation"
+  ],
   "human_actions_pending": [
-    "User needs to test the newly packaged DocuMark AI Setup 1.0.0.exe"
+    "Save any open document and close the installed Mark Tini application"
   ],
   "decisions": [
-    "Disabled MDEditor highlightEnable=false to fix Tailwind CSS Preflight conflict",
-    "Replaced console.error with safeLog to prevent EPIPE crashes in packaged Electron",
-    "Added detailed DHSystem branding to the Sidebar for a more professional look"
+    "Use one allowlisted shared Electron host with --product=mark-tini or --product=tini-ocr",
+    "Keep Mark Tini App.tsx behavior unchanged behind a product adapter",
+    "Do not start a second backend from the Tini OCR shell before T13.2",
+    "Do not terminate the user's installed app automatically"
   ],
-  "uncommitted_files": [
-    "frontend/src/main.tsx"
-  ],
-  "next_action": "Check user feedback after testing the new build",
-  "context_notes": "We just finished major UI bug fixes (ghost text) and crashing bugs (EPIPE) for the Electron packaged app. The app successfully compiled into a release setup. Waiting for the user to try the setup."
+  "uncommitted_files": [],
+  "next_action": "After installed Mark Tini is closed, run npm run test:e2e from frontend",
+  "context_notes": "Lint and build pass. Three product-boundary Electron smoke tests pass, including concurrent Mark Tini and Tini OCR windows. Full Mark Tini regression is paused only because the installed application is still running on port 8088."
 }

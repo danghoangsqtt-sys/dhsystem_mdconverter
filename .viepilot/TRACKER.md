@@ -2,7 +2,7 @@
 
 ## Current State
 - **Current Phase:** Phase 13 — Tini Suite Ecosystem
-- **Status:** T13.1 in progress — shared host and product boundaries
+- **Status:** T13.1 verification control point — product smoke 3/3 pass; installed Mark Tini is holding port 8088 for full regression
 - **Released Version:** 1.5.0
 - **Target Version:** 1.6.0
 - **Last Updated:** 2026-08-21

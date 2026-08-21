@@ -3,6 +3,9 @@ Tất cả các thay đổi của dự án sẽ được cập nhật tại đâ
 
 ## [Unreleased]
 
+### Added
+- **Tini Suite shell:** Thêm bootstrap product theo allowlist cho **Mark Tini** và **Tini OCR**, metadata cửa sổ/AppUserModelID riêng, preload contract chỉ đọc và giao diện Tini OCR responsive để nhập/xếp danh sách ảnh trước khi pipeline OCR được nối ở task tiếp theo.
+
 ### Planned
 - **Tini Suite v1.6.0:** Hoàn tất SPEC/PLAN cho một bộ cài offline có hai product entry: **Mark Tini — Document Studio** và **Tini OCR — Image to Text & Word**, dùng chung Electron host, Tini Core, Python runtime và model store. Chưa thay đổi phiên bản runtime/package và chưa phát hành chức năng này.
 

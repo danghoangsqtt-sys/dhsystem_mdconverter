@@ -32,7 +32,7 @@ test.describe.serial('Mark Tini desktop app', () => {
   let convertedFileName: string;
 
   test.beforeAll(async () => {
-    electronApp = await electron.launch({ args: [MAIN_ENTRY], env: electronEnv });
+    electronApp = await electron.launch({ args: [MAIN_ENTRY, '--product=mark-tini'], env: electronEnv });
     page = await electronApp.firstWindow();
   });
 
@@ -215,5 +215,40 @@ test.describe.serial('Mark Tini desktop app', () => {
     await expect(page.getByText(firstName).first()).toBeVisible({ timeout: 120_000 });
     await expect(page.getByText(secondName).first()).toBeVisible({ timeout: 120_000 });
     await expect(uploadButton).toBeEnabled({ timeout: 30_000 });
+  });
+});
+
+test.describe('Tini Suite product boundaries', () => {
+  test('launches the Tini OCR shell without Mark Tini controls', async () => {
+    const ocrApp = await electron.launch({
+      args: [MAIN_ENTRY, '--product=tini-ocr'],
+      env: electronEnv,
+    });
+    try {
+      const ocrPage = await ocrApp.firstWindow();
+      await expect(ocrPage).toHaveTitle('Tini OCR — Image to Text & Word');
+      await expect(ocrPage.getByTestId('tini-ocr-shell')).toBeVisible();
+      await expect(ocrPage.getByRole('heading', { name: 'Biến ảnh chụp tài liệu thành nội dung có thể chỉnh sửa' })).toBeVisible();
+      await expect(ocrPage.getByRole('button', { name: 'Chọn ảnh' })).toBeVisible();
+      await expect(ocrPage.getByRole('button', { name: 'Chọn tài liệu' })).toHaveCount(0);
+    } finally {
+      await ocrApp.close();
+    }
+  });
+
+  test('opens Mark Tini and Tini OCR at the same time', async () => {
+    const [markApp, ocrApp] = await Promise.all([
+      electron.launch({ args: [MAIN_ENTRY, '--product=mark-tini'], env: electronEnv }),
+      electron.launch({ args: [MAIN_ENTRY, '--product=tini-ocr'], env: electronEnv }),
+    ]);
+    try {
+      const [markPage, ocrPage] = await Promise.all([markApp.firstWindow(), ocrApp.firstWindow()]);
+      await expect(markPage).toHaveTitle('Mark Tini');
+      await expect(ocrPage).toHaveTitle('Tini OCR — Image to Text & Word');
+      await expect(markPage.getByText('DHSystem').first()).toBeVisible();
+      await expect(ocrPage.getByTestId('tini-ocr-shell')).toBeVisible();
+    } finally {
+      await Promise.all([ocrApp.close(), markApp.close()]);
+    }
   });
 });
