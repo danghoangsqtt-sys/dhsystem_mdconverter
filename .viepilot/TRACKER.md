@@ -2,7 +2,7 @@
 
 ## Current State
 - **Current Phase:** Phase 13 — Tini Suite Ecosystem
-- **Status:** T13.1 complete — ready for T13.2 shared Core lifecycle
+- **Status:** T13.2 in progress — shared Core supervisor and global scheduler
 - **Released Version:** 1.5.0
 - **Target Version:** 1.6.0
 - **Last Updated:** 2026-08-21
