@@ -15,4 +15,5 @@ contextBridge.exposeInMainWorld('documark', {
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
   ensureOllama: () => ipcRenderer.invoke('ensure-ollama'),
   saveWordFile: (fileName: string, bytes: Uint8Array) => ipcRenderer.invoke('save-word-file', fileName, bytes),
+  saveExportFile: (fileName: string, bytes: Uint8Array) => ipcRenderer.invoke('save-export-file', fileName, bytes),
 })

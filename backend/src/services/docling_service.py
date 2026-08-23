@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import gc
 import os
 import logging
@@ -9,10 +11,6 @@ from typing import Any
 from PIL import Image
 
 from ..config import settings
-
-from docling.document_converter import DocumentConverter, PdfFormatOption, WordFormatOption
-from docling.datamodel.base_models import ConversionStatus, InputFormat
-from docling.datamodel.pipeline_options import PdfPipelineOptions, TableFormerMode, EasyOcrOptions
 
 from .markdown_cleaner import clean_markdown
 from .resource_scheduler import heavy_job_slot
@@ -37,17 +35,23 @@ DEFAULT_OCR_LANG = "vi_en"
 # TableFormerMode.ACCURATE: better handling of merged cells, multi-row
 # headers, complex table structures — but ~2-3x slower than FAST. Exposed
 # as a user choice since not every document needs the accuracy trade-off.
-TABLE_MODES: dict[str, "TableFormerMode"] = {
-    "accurate": TableFormerMode.ACCURATE,
-    "fast": TableFormerMode.FAST,
-}
+TABLE_MODES = {"accurate", "fast"}
 DEFAULT_TABLE_MODE = "accurate"
+
+# Docling's AcceleratorOptions.num_threads defaults to a hardcoded 4
+# regardless of machine size. Use most of the available CPU cores instead,
+# leaving a couple free so the backend/UI stay responsive during a
+# conversion (heavy_job_slot already limits this to one job at a time, so
+# there's no risk of multiple conversions competing for the same cores).
+_cpu_count = os.cpu_count() or 4
+ACCELERATOR_NUM_THREADS = max(4, min(_cpu_count - 2, 16))
 
 # Large scanned PDFs can make the native PDF preprocessing stage retain too
 # many page bitmaps at once.  Keep both Docling's internal inference batches
 # and our page ranges bounded.  Failed ranges are split recursively below, so
 # this is a performance knob rather than a correctness limit.
-PDF_CHUNK_SIZE = 8
+# Increased from 8 to 16 to better utilize batch sizes above.
+PDF_CHUNK_SIZE = 16
 PDF_FALLBACK_MAX_DIMENSION = 2200
 
 # Each (lang, table_mode) combination needs its own DocumentConverter,
@@ -56,13 +60,23 @@ PDF_FALLBACK_MAX_DIMENSION = 2200
 # combinations eagerly would hold several full ML pipelines in memory at
 # once, so instead each is built lazily on first use and cached — only the
 # default combination is warmed up eagerly at startup (see warm_up_models).
-_converter_cache: dict[tuple[str, str], DocumentConverter] = {}
+_converter_cache: dict[tuple[str, str], Any] = {}
 _cache_lock = threading.Lock()
 _region_reader_cache: dict[str, Any] = {}
 _region_reader_lock = threading.Lock()
 
 
-def _build_converter(lang_key: str, table_mode_key: str) -> DocumentConverter:
+def _build_converter(lang_key: str, table_mode_key: str) -> Any:
+    # Docling imports Torch and its native ML stack.  Importing it at module
+    # load used to delay Uvicorn from opening the health endpoint for more
+    # than 90 seconds on a cold packaged start.  Keep the import behind the
+    # background warm-up/first-conversion boundary so the desktop shell can
+    # attach to Tini Core immediately and display real model-loading progress.
+    from docling.document_converter import DocumentConverter, PdfFormatOption, WordFormatOption
+    from docling.datamodel.accelerator_options import AcceleratorDevice, AcceleratorOptions
+    from docling.datamodel.base_models import InputFormat
+    from docling.datamodel.pipeline_options import EasyOcrOptions, PdfPipelineOptions, TableFormerMode
+
     pipeline_options = PdfPipelineOptions()
     pipeline_options.enable_remote_services = False
     if settings.docling_artifacts_path is not None:
@@ -76,7 +90,9 @@ def _build_converter(lang_key: str, table_mode_key: str) -> DocumentConverter:
             "DOCUMARK_OFFLINE_MODE requires DOCLING_ARTIFACTS_PATH with pre-downloaded models."
         )
     pipeline_options.do_table_structure = True
-    pipeline_options.table_structure_options.mode = TABLE_MODES[table_mode_key]
+    pipeline_options.table_structure_options.mode = (
+        TableFormerMode.ACCURATE if table_mode_key == "accurate" else TableFormerMode.FAST
+    )
     pipeline_options.table_structure_options.do_cell_matching = True
     pipeline_options.ocr_options = EasyOcrOptions(
         lang=OCR_LANG_PRESETS[lang_key],
@@ -88,13 +104,16 @@ def _build_converter(lang_key: str, table_mode_key: str) -> DocumentConverter:
     # Uses the local CodeFormulaV2 model (bundled offline, no remote calls).
     pipeline_options.do_formula_enrichment = True
     pipeline_options.do_code_enrichment = True
-    # The defaults are 4.  A real 128-page driving-test PDF exhausted native
-    # memory (std::bad_alloc) with those settings and Docling returned a silent
-    # partial_success.  Single-item ML batches trade some throughput for a
-    # much lower and predictable memory peak on ordinary Windows machines.
-    pipeline_options.layout_batch_size = 1
-    pipeline_options.ocr_batch_size = 1
-    pipeline_options.table_batch_size = 1
+# Increased from 1 to improve throughput on modern CPUs (4+ cores).
+    # Memory stays bounded because PDF_CHUNK_SIZE limits concurrent pages.
+    # Tuned for typical Windows machines with 8-16GB RAM.
+    pipeline_options.layout_batch_size = 4
+    pipeline_options.ocr_batch_size = 4
+    pipeline_options.table_batch_size = 2
+    pipeline_options.accelerator_options = AcceleratorOptions(
+        device=AcceleratorDevice.AUTO,
+        num_threads=ACCELERATOR_NUM_THREADS,
+    )
 
     return DocumentConverter(
         format_options={
@@ -108,7 +127,7 @@ def _build_converter(lang_key: str, table_mode_key: str) -> DocumentConverter:
     )
 
 
-def get_converter(lang_key: str = DEFAULT_OCR_LANG, table_mode_key: str = DEFAULT_TABLE_MODE) -> DocumentConverter:
+def get_converter(lang_key: str = DEFAULT_OCR_LANG, table_mode_key: str = DEFAULT_TABLE_MODE) -> Any:
     """
     Returns a cached DocumentConverter for the given (language, table mode)
     combination, building and warming it up on first use. Unknown keys
@@ -124,6 +143,8 @@ def get_converter(lang_key: str = DEFAULT_OCR_LANG, table_mode_key: str = DEFAUL
     with _cache_lock:
         converter = _converter_cache.get(cache_key)
         if converter is None:
+            from docling.datamodel.base_models import InputFormat
+
             logger.info(f"Building DocumentConverter for lang={lang_key}, table_mode={table_mode_key}...")
             converter = _build_converter(lang_key, table_mode_key)
             converter.initialize_pipeline(InputFormat.PDF)
@@ -150,6 +171,8 @@ def warm_up_models() -> None:
         startup_state["status"] = "loading_models"
         startup_state["detail"] = "Đang tải mô hình AI (lần đầu có thể mất vài phút)..."
         get_converter(DEFAULT_OCR_LANG, DEFAULT_TABLE_MODE)
+        # Pre-warm region OCR reader for faster first region extraction
+        get_region_reader(DEFAULT_OCR_LANG)
         startup_state["status"] = "ready"
         startup_state["detail"] = "Sẵn sàng."
         logger.info("Model warm-up complete; backend ready.")
@@ -219,7 +242,8 @@ class IncompleteDocumentConversionError(RuntimeError):
     """Raised when Docling could not account for every requested page."""
 
 
-def _get_region_reader(lang_key: str) -> Any:
+def get_region_reader(lang_key: str = DEFAULT_OCR_LANG) -> Any:
+    """Return the shared direct EasyOCR reader used by crops and Tini OCR."""
     if lang_key not in OCR_LANG_PRESETS:
         lang_key = DEFAULT_OCR_LANG
     with _region_reader_lock:
@@ -252,7 +276,7 @@ def _extract_region_text(image_path: Path, lang_key: str) -> str:
     user intent, so use EasyOCR directly with permissive detection thresholds
     and preserve every recognized line for review/editing in the UI.
     """
-    reader = _get_region_reader(lang_key)
+    reader = get_region_reader(lang_key)
     lines = reader.readtext(
         str(image_path),
         detail=0,
@@ -276,6 +300,8 @@ def _conversion_error_summary(result: Any) -> str:
 
 
 def _is_complete_result(result: Any, expected_pages: int | None = None) -> bool:
+    from docling.datamodel.base_models import ConversionStatus
+
     if getattr(result, "status", None) != ConversionStatus.SUCCESS:
         return False
     if expected_pages is None:
@@ -285,6 +311,8 @@ def _is_complete_result(result: Any, expected_pages: int | None = None) -> bool:
 
 
 def _export_result(result: Any) -> str:
+    from docling.datamodel.base_models import InputFormat
+
     if result.input.format == InputFormat.IMAGE:
         # Image inputs are user-selected OCR regions or raster fallbacks for a
         # problematic PDF page.  Reading text items directly avoids Docling's
@@ -330,7 +358,7 @@ def _render_pdf_page_to_image(file_path: Path, page_number: int, output_path: Pa
 
 
 def _convert_rasterized_pdf_page(
-    converter: DocumentConverter,
+    converter: Any,
     file_path: Path,
     page_number: int,
     lang_key: str,
@@ -348,7 +376,7 @@ def _convert_rasterized_pdf_page(
 
 
 def _convert_pdf_range(
-    converter: DocumentConverter,
+    converter: Any,
     file_path: Path,
     start_page: int,
     end_page: int,
@@ -385,7 +413,7 @@ def _convert_pdf_range(
 
 
 def _convert_pdf_in_chunks(
-    converter: DocumentConverter,
+    converter: Any,
     file_path: Path,
     lang_key: str = DEFAULT_OCR_LANG,
 ) -> str:

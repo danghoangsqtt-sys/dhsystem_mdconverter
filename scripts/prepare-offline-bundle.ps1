@@ -22,6 +22,16 @@ function Invoke-CheckedPython {
     }
 }
 
+function Test-RequiredFiles {
+    param([string[]]$Paths)
+    foreach ($requiredPath in $Paths) {
+        if (-not (Test-Path -LiteralPath $requiredPath -PathType Leaf)) {
+            return $false
+        }
+    }
+    return $true
+}
+
 if (-not $ValidateOnly -and -not (Test-Path -LiteralPath $pythonExe -PathType Leaf)) {
     New-Item -ItemType Directory -Path $runtimeDir | Out-Null
     $versionParts = $PythonVersion.Split('.')
@@ -58,18 +68,43 @@ if (-not $ValidateOnly) {
     Write-Host 'Installing hash-locked backend dependencies into the portable runtime...'
     Invoke-CheckedPython @('-s', '-m', 'pip', 'install', '--disable-pip-version-check', '--require-hashes', '-r', $requirementsLock)
     New-Item -ItemType Directory -Path $modelsDir -Force | Out-Null
-    Write-Host 'Downloading the exact Docling and EasyOCR artifacts used by the application...'
-    Invoke-CheckedPython @(
-        '-s', '-m', 'docling.cli.tools', 'models', 'download',
-        'layout', 'tableformer', 'easyocr', 'code_formula', '--output-dir', $modelsDir
+    $requiredDoclingFiles = @(
+        (Join-Path $modelsDir 'docling-project--docling-layout-heron\model.safetensors'),
+        (Join-Path $modelsDir 'docling-project--docling-layout-heron\config.json'),
+        (Join-Path $modelsDir 'docling-project--docling-models\model_artifacts\tableformer\accurate\tableformer_accurate.safetensors'),
+        (Join-Path $modelsDir 'docling-project--docling-models\model_artifacts\tableformer\fast\tableformer_fast.safetensors'),
+        (Join-Path $modelsDir 'docling-project--CodeFormulaV2\model.safetensors'),
+        (Join-Path $modelsDir 'docling-project--CodeFormulaV2\config.json'),
+        (Join-Path $modelsDir 'EasyOcr\craft_mlt_25k.pth'),
+        (Join-Path $modelsDir 'EasyOcr\latin_g2.pth'),
+        (Join-Path $modelsDir 'EasyOcr\english_g2.pth')
     )
+    if (Test-RequiredFiles $requiredDoclingFiles) {
+        Write-Host 'Docling and EasyOCR artifacts already complete; skipping network download.'
+    } else {
+        Write-Host 'Downloading missing Docling and EasyOCR artifacts...'
+        Invoke-CheckedPython @(
+            '-s', '-m', 'docling.cli.tools', 'models', 'download',
+            'layout', 'tableformer', 'easyocr', 'code_formula', '--output-dir', $modelsDir
+        )
+    }
 
-    Write-Host 'Downloading the offline EN->VI translation model (VietAI/envit5-translation)...'
-    $env:DOCUMARK_TRANSLATION_DOWNLOAD_DIR = $translationDir
-    Invoke-CheckedPython @(
-        '-s', '-c',
-        "import os; from huggingface_hub import snapshot_download; snapshot_download(repo_id='VietAI/envit5-translation', local_dir=os.environ['DOCUMARK_TRANSLATION_DOWNLOAD_DIR'], allow_patterns=['*.json', '*.model', 'pytorch_model.bin'])"
+    $requiredTranslationFiles = @(
+        (Join-Path $translationDir 'config.json'),
+        (Join-Path $translationDir 'pytorch_model.bin'),
+        (Join-Path $translationDir 'spiece.model'),
+        (Join-Path $translationDir 'tokenizer.json')
     )
+    if (Test-RequiredFiles $requiredTranslationFiles) {
+        Write-Host 'Translation artifacts already complete; skipping network download.'
+    } else {
+        Write-Host 'Downloading the offline EN->VI translation model (VietAI/envit5-translation)...'
+        $env:DOCUMARK_TRANSLATION_DOWNLOAD_DIR = $translationDir
+        Invoke-CheckedPython @(
+            '-s', '-c',
+            "import os; from huggingface_hub import snapshot_download; snapshot_download(repo_id='VietAI/envit5-translation', local_dir=os.environ['DOCUMARK_TRANSLATION_DOWNLOAD_DIR'], allow_patterns=['*.json', '*.model', 'pytorch_model.bin'])"
+        )
+    }
 }
 
 $modelFiles = @(Get-ChildItem -LiteralPath $modelsDir -File -Recurse -ErrorAction SilentlyContinue)

@@ -1,11 +1,11 @@
 <div align="center">
-  <img src="docs/logo.svg" alt="Mark Tini Logo" width="120" height="120" style="margin: 20px 0;" />
+  <img src="docs/logo.svg" alt="Tini Suite Logo" width="120" height="120" style="margin: 20px 0;" />
   
-  # Mark Tini Editor
+  # Tini Suite
   
-  **🚀 Chuyển đổi tài liệu sang Markdown — Hoàn toàn ngoại tuyến, chạy cục bộ trên Windows**
+  **🚀 Mark Tini (tài liệu → Markdown/Word) & Tini OCR (ảnh → text/Word) — Hoàn toàn ngoại tuyến, chạy cục bộ trên Windows**
 
-  [![Version](https://img.shields.io/badge/version-1.5.0-58A6FF?style=for-the-badge)](CHANGELOG.md)
+  [![Version](https://img.shields.io/badge/version-1.6.0-58A6FF?style=for-the-badge)](CHANGELOG.md)
   [![License](https://img.shields.io/badge/license-MIT-3FB950?style=for-the-badge)](LICENSE)
   [![Platform](https://img.shields.io/badge/platform-Windows-0078D4?style=for-the-badge&logo=windows&logoColor=white)](README.md)
   [![Made with](https://img.shields.io/badge/made%20with-Electron%20%7C%20React-black?style=for-the-badge&logo=electron&logoColor=white)](frontend/package.json)
@@ -14,9 +14,9 @@
 
 ---
 
-## � Tài liệu & Hướng dẫn
+## 📚 Tài liệu & Hướng dẫn
 
-Dự án Mark Tini có đầy đủ tài liệu cho cả người dùng cuối và nhà phát triển:
+Dự án Tini Suite có đầy đủ tài liệu cho cả người dùng cuối và nhà phát triển:
 
 ### 👤 Cho người dùng cuối
 
@@ -24,6 +24,8 @@ Dự án Mark Tini có đầy đủ tài liệu cho cả người dùng cuối v
 |----------|---------|------|
 | 📖 **Hướng dẫn sử dụng v1.3.0** | Cách sử dụng từng tính năng, xử lý lỗi, FAQ | [📖 Mở](docs/huong-dan-su-dung-v1.3.0.md) |
 | 🎓 **Báo cáo kỹ thuật v1.3.0** | Chi tiết implementation, tính năng mới, fix bugs, test coverage | [📋 Xem](docs/bao-cao-ky-thuat-v1.3.0.md) |
+
+> Hai tài liệu trên chưa cập nhật tới v1.6.0 (Tini Suite/Tini OCR) — dùng [CHANGELOG.md](CHANGELOG.md) cho các thay đổi mới nhất.
 
 ### 👨‍💻 Cho nhà phát triển
 
@@ -33,13 +35,12 @@ Dự án Mark Tini có đầy đủ tài liệu cho cả người dùng cuối v
 | 🏛️ **Kiến trúc hệ thống** | Thiết kế hệ thống, invariant bảo mật, offline strategy | [🏛️ Xem](.viepilot/ARCHITECTURE.md) |
 | 🔐 **Spec v1.2** | Bảo mật, reliability, offline packaging requirements | [🔐 Xem](.viepilot/phases/phase-8-reliability-security-offline/SPEC.md) |
 | 📝 **Changelog** | Lịch sử phiên bản, fix & feature mỗi release | [📜 Xem](CHANGELOG.md) |
-| 🤝 **Hướng dẫn đóng góp** | Quy trình fork, commit, pull request | [🤝 Xem](CONTRIBUTING.md) |
 
 ---
 
-## �📋 Tổng quan
+## 📋 Tổng quan
 
-**Mark Tini** là công cụ Windows chuyên biệt chuyển PDF, DOCX, PPTX, HTML và ảnh sang Markdown sạch, dễ chỉnh sửa. Toàn bộ xử lý diễn ra **trên máy của bạn** — không cần đẩy file lên đám mây, không cần tài khoản, không cần internet cho phần lớn tính năng.
+**Tini Suite** là bộ công cụ Windows gồm hai ứng dụng riêng: **Mark Tini** chuyển PDF/DOCX/PPTX/HTML sang nội dung có cấu trúc và **Tini OCR** chuyển ảnh chụp thành text/Word. Cả hai xử lý **trên máy của bạn**, dùng chung một Tini Core và bộ model offline.
 
 Từ phiên bản **v1.2.0** trở lên, Mark Tini sử dụng:
 - **Hàng đợi backend với trạng thái thật**: Job được xử lý tuần tự, có thể hủy an toàn, không để lại dữ liệu rác
@@ -51,7 +52,9 @@ Từ phiên bản **v1.2.0** trở lên, Mark Tini sử dụng:
 | Tính năng | Mô tả |
 |-----------|--------|
 | 📄 **Chuyển đổi đa định dạng** | PDF, DOCX, PPTX, HTML, ảnh (PNG, JPEG, TIFF, BMP) |
-| 🧾 **Xuất Word giống PDF** | Chuyển toàn bộ trang PDF sang DOCX bằng ảnh lossless, giữ nguyên nội dung, công thức, sơ đồ và hình ảnh |
+| 📝 **DOCX chỉnh sửa được** | PDF qua Docling rồi xuất heading, đoạn, danh sách và bảng Word native; dùng chính nội dung người dùng đã review |
+| 🧾 **DOCX giống PDF (dạng ảnh)** | Tùy chọn giữ từng trang PDF dưới dạng ảnh lossless khi bố cục tuyệt đối quan trọng hơn khả năng sửa chữ |
+| 📷 **Tini OCR riêng** | OCR nhiều ảnh Việt–Anh, review theo trang và xuất TXT/Markdown/hai mode DOCX |
 | 🗣️ **OCR Việt/Anh** | Lựa chọn ngôn ngữ: `vi+en`, `vi`, hoặc `en` tùy theo tài liệu |
 | 📊 **Nhận dạng bảng thông minh** | Hai chế độ: `Accurate` (chính xác) hoặc `Fast` (nhanh) |
 | ✂️ **Trích xuất vùng PDF** | Vẽ khung chọn để OCR riêng một vùng, không phải cả trang |
@@ -97,8 +100,6 @@ Từ phiên bản **v1.2.0** trở lên, Mark Tini sử dụng:
 
 ---
 
-## 🚀 Cài đặt và sử dụng
-
 ## Kiến trúc
 
 ```text
@@ -116,24 +117,20 @@ Thiết kế chi tiết và các invariant nằm tại [ARCHITECTURE.md](.viepil
 
 ## Tài liệu phiên bản hiện tại
 
-Phiên bản hoàn thiện hiện tại: 1.5.0.
+Phiên bản hoàn thiện hiện tại: 1.6.0.
 
 - [Báo cáo kỹ thuật v1.3.0](docs/bao-cao-ky-thuat-v1.3.0.md)
 - [Hướng dẫn sử dụng v1.3.0](docs/huong-dan-su-dung-v1.3.0.md)
 - [Luồng hoạt động dự án](docs/luong-hoat-dong-du-an.md)
 - [Changelog](CHANGELOG.md)
 
-## Trạng thái phát hành
-
-v1.5.0 bổ sung **Xuất Word giống PDF**: toàn bộ trang PDF được nhúng lossless vào DOCX theo đúng kích thước và hướng trang, giữ nguyên văn bản, công thức, sơ đồ khối và hình ảnh. Vì ưu tiên hình thức giống PDF, nội dung trong Word là ảnh toàn trang và không chỉnh sửa riêng từng chữ.
-
 ## 🚀 Cài đặt và sử dụng
 
 ### Cài đặt (Người dùng cuối)
 
-1. **Nhận installer**: Chép file `Mark Tini Setup 1.5.0.exe` từ USB hoặc kênh lưu trữ nội bộ do DHSystem cung cấp
+1. **Nhận installer**: Chép file `Tini Suite Setup 1.6.0.exe` từ USB hoặc kênh lưu trữ nội bộ do DHSystem cung cấp
 2. **Chạy installer**: Double-click file `.exe`, làm theo hướng dẫn
-3. **Khởi chạy**: Mở ứng dụng từ Desktop hoặc Start Menu
+3. **Khởi chạy**: Desktop và Start Menu có hai mục riêng **Mark Tini** và **Tini OCR**; cả hai dùng chung một bộ cài và một mục gỡ cài đặt
 4. **Lần đầu**: Chờ 10-60 giây để nạp model AI (tuỳ thuộc cấu hình máy)
 
 > 💡 Không cần cài Python, Node.js, hoặc bất kỳ dependency nào — mọi thứ đã được đóng gói sẵn
@@ -155,7 +152,7 @@ Xem [**📖 Hướng dẫn sử dụng đầy đủ v1.3.0**](docs/huong-dan-su-
 **Quick start** — 5 bước cơ bản:
 
 1. Mở ứng dụng
-2. Ở Sidebar trái, chọn **"Chọn tài liệu"** hoặc **"Chọn cả thư mục"**
+2. Ở Sidebar trái, chọn **"Thêm file"** hoặc **"Chọn cả thư mục"**
 3. Chọn một/nhiều file, hoặc chọn thư mục chứa PDF/DOCX/PPTX/HTML
 4. Chọn ngôn ngữ OCR và chế độ nhận dạng bảng
 5. Chờ xong, chỉnh sửa Markdown trong editor, rồi lưu/copy kết quả
@@ -198,11 +195,13 @@ Quy trình build tự động:
 1. Tạo runtime Python embeddable nếu chưa có
 2. Tải model Docling/EasyOCR/translation vào `offline_models/`
 3. Validate dependency lock (`requirements.lock.txt`)
-4. Build NSIS installer → `frontend/release/Mark Tini Setup 1.5.0.exe`
+4. Build NSIS installer → `frontend/release/Tini Suite Setup 1.6.0.exe`
 
 ---
 
 ## 🏗️ Kiến trúc hệ thống
+
+Sơ đồ dưới đây là lát cắt UI của **Mark Tini**. **Tini OCR** dùng chung FastAPI backend, Tini Core, hàng đợi và model store — chỉ khác panel giao diện (hàng đợi ảnh/review theo trang thay vì Translation/Citation Panel).
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -240,18 +239,13 @@ Quy trình build tự động:
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**Stack công nghệ:**
-- **Frontend**: React 19, TypeScript, Vite, Tailwind CSS, MDEditor
-- **Desktop**: Electron 42, IPC preload bridge, context isolation
-- **Backend**: FastAPI, Docling 2.101.0, EasyOCR 1.7.2, Python 3.14
-- **Storage**: IndexedDB (frontend), atomic file I/O (backend)
-- **Security**: API token per-session, trusted-origin bootstrap, content validation
+**Bảo mật:** API token per-session, trusted-origin bootstrap, content validation (chi tiết stack công nghệ xem mục [Kiến trúc](#kiến-trúc) ở trên).
 
 Chi tiết kiến trúc: [ARCHITECTURE.md](.viepilot/ARCHITECTURE.md) | [SPEC v1.2](.viepilot/phases/phase-8-reliability-security-offline/SPEC.md)
 
 ---
 
-##  Bảo mật & Dữ liệu
+## 🔒 Bảo mật & Dữ liệu
 
 - ✅ **100% cục bộ**: Toàn bộ conversion xảy ra trên máy, không đẩy lên cloud
 - ✅ **Không tài khoản**: Không cần đăng nhập hoặc tạo tài khoản
@@ -274,11 +268,14 @@ Chi tiết kiến trúc: [ARCHITECTURE.md](.viepilot/ARCHITECTURE.md) | [SPEC v1
 docling-env\Scripts\python.exe -m unittest discover -s backend\tests -v
 ```
 
-**Coverage:**
+**Coverage:** 109 tests / 14 module, gồm:
 - API token validation, path traversal
-- Job queue, cancel semantics, capacity limits
-- Storage atomicity, cleanup orphaned outputs/uploads
-- Markdown table correctness (regressions)
+- Job queue (Mark Tini), cancel semantics, capacity limits
+- Storage atomicity, cleanup orphaned outputs/uploads, startup cleanup
+- Docling: chunked large-PDF conversion, markdown table correctness
+- Word export: DOCX chỉnh sửa (markdown → docx) và DOCX giống PDF (raster-faithful)
+- Tini OCR: nhận dạng ảnh (EasyOCR), export kết quả OCR
+- Dịch EN↔VI, xác minh trích dẫn (citation), resource scheduler
 
 ### Lint & Build
 
@@ -306,9 +303,13 @@ Kiểm tra:
 
 ## 📊 Trạng thái phát hành
 
-### Phiên bản hiện tại: **v1.5.0** (2026-08-21)
+### Phiên bản hiện tại: **v1.6.0** (2026-08-21)
 
 **Cải tiến chính:**
+- ✅ Một setup offline tạo hai ứng dụng riêng Mark Tini và Tini OCR, dùng chung Tini Core/runtime/model
+- ✅ OCR ảnh Việt–Anh thực tế, review và xuất TXT/Markdown/DOCX
+- ✅ PDF → Docling → DOCX editable với chữ/bảng biên soạn được ngay dưới nút Thêm file
+- ✅ Giữ tùy chọn DOCX giống PDF dạng ảnh với nhãn phân biệt rõ
 - ✅ Xuất toàn bộ PDF sang Word bằng ảnh lossless, giữ nguyên công thức, sơ đồ, hình ảnh và từng hướng/khổ trang
 - ✅ Hộp thoại Lưu thành cho phép chọn trực tiếp USB; có thể xuất lại PDF gốc từ lịch sử
 - ✅ Toolbar/Sidebar responsive, không chồng lấn khi thu nhỏ cửa sổ
@@ -340,7 +341,7 @@ Kiểm tra:
 Gặp sự cố? Hãy:
 
 1. Kiểm tra [Troubleshooting](docs/huong-dan-su-dung-v1.3.0.md#-xử-lý-sự-cố-thường-gặp) trong hướng dẫn
-2. Xem file log tại `%APPDATA%\Mark Tini\data\logs\backend.log`
+2. Xem file log tại `%APPDATA%\Tini Suite\data\logs\backend.log`
 3. Mở [Issue trên GitHub](../../issues) với:
    - Phiên bản ứng dụng (xem trong About)
    - Bước tái tạo lỗi
@@ -359,19 +360,17 @@ Mọi đóng góp đều được chào đón! Vui lòng:
 4. **Push** lên branch của bạn: `git push origin feature/your-feature`
 5. **Mở Pull Request** với mô tả chi tiết
 
-Chi tiết xem [CONTRIBUTING.md](CONTRIBUTING.md).
-
 ---
 
 ## 📜 License
 
-Mark Tini được phát hành dưới license **MIT**. Xem [LICENSE](LICENSE) để biết chi tiết.
+Tini Suite được phát hành dưới license **MIT**. Xem [LICENSE](LICENSE) để biết chi tiết.
 
 ---
 
 ## 👥 Về dự án
 
-**Mark Tini** là một sản phẩm của [DHSystem](https://dhsystem.example.com), được phát triển với mục đích cung cấp công cụ chuyển đổi tài liệu mạnh mẽ, bảo mật và riêng tư cho người dùng Windows.
+**Tini Suite** (gồm **Mark Tini** và **Tini OCR**) là sản phẩm của [DHSystem](https://dhsystem.example.com), được phát triển với mục đích cung cấp bộ công cụ chuyển đổi & nhận dạng tài liệu mạnh mẽ, bảo mật và riêng tư cho người dùng Windows.
 
 **Tác giả:** DHSystem (@danghoangsqtt-sys)  
 **Năm**: 2026

@@ -3,12 +3,22 @@ Tất cả các thay đổi của dự án sẽ được cập nhật tại đâ
 
 ## [Unreleased]
 
+## [1.6.0] — 2026-08-21
+
 ### Added
-- **Tini Suite shell:** Thêm bootstrap product theo allowlist cho **Mark Tini** và **Tini OCR**, metadata cửa sổ/AppUserModelID riêng, preload contract chỉ đọc và giao diện Tini OCR responsive để nhập/xếp danh sách ảnh trước khi pipeline OCR được nối ở task tiếp theo.
+- **Tini Suite:** Một bộ cài offline tạo hai ứng dụng/shortcut riêng: **Mark Tini — Document Studio** và **Tini OCR — Image to Text & Word**; cả hai dùng chung Electron host, Tini Core, Python runtime và model store.
+- **Tini OCR thực tế:** Nhập/xếp lại nhiều ảnh JPG/PNG, tiền xử lý an toàn, OCR Việt–Anh bằng EasyOCR offline, overlay vùng chữ/confidence, sửa kết quả và xuất TXT/Markdown/DOCX editable hoặc DOCX giữ ảnh.
+- **DOCX chỉnh sửa được:** Luồng PDF đi qua Docling như trước, sau đó nội dung Markdown có cấu trúc/đã review được chuyển thành heading, đoạn, danh sách, bảng và code Word native. Hai lựa chọn Word nằm ngay dưới nút **Thêm file** ở sidebar.
 - **Branding:** Nhập ba icon chính thức do người dùng cung cấp; loại nền đen ngoài Mark Tini/Tini OCR thành alpha trong suốt và tạo bộ `.ico` 7 kích thước cho installer cùng hai product shortcut.
 
-### Planned
-- **Tini Suite v1.6.0:** Hoàn tất SPEC/PLAN cho một bộ cài offline có hai product entry: **Mark Tini — Document Studio** và **Tini OCR — Image to Text & Word**, dùng chung Electron host, Tini Core, Python runtime và model store. Chưa thay đổi phiên bản runtime/package và chưa phát hành chức năng này.
+### Changed
+- **Tini Core:** Hai product dùng chung lock/session/lease, crash recovery và last-client shutdown; Docling, OCR và export nặng dùng scheduler chung.
+- **Hiệu năng backend:** OCR vùng và Tini OCR dùng chung một EasyOCR singleton được warm-up cùng Core, loại hai model instance trùng và tránh warm-up song song tranh RAM. DOCX editable tái sử dụng kết quả Docling hiện có nên không chạy ML lần hai.
+- **Installer:** Shortcut chỉ được tạo bởi NSIS, không còn chạy PowerShell mỗi lần mở app; không tạo shortcut Tini Suite thứ ba và không gọi auto-update/GitHub khi khởi động offline.
+
+### Fixed
+- **PDF-to-DOCX:** Sửa trải nghiệm chỉ tạo ảnh toàn trang không thể biên soạn; mode này vẫn còn dưới nhãn rõ **DOCX giống PDF (dạng ảnh)** khi người dùng cần giữ bố cục tuyệt đối.
+- **Quality:** 109 backend tests, lint/build và 12 Electron E2E đạt, gồm PDF→Docling→DOCX editable, OCR Việt thật, export DOCX và hai app mở đồng thời/tự phục hồi Core.
 
 ## [1.5.0] — 2026-08-21
 

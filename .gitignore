@@ -4,6 +4,13 @@ frontend/dist-electron/
 frontend/release/
 dist-electron/
 
+# One-off / manual electron-builder output and backup snapshots created
+# outside the standard `release/` path during local packaging tests.
+frontend/dist-release/
+frontend/release-candidate-*/
+frontend/release-sandbox-backup-*/
+frontend/test-results-sandbox-backup-*/
+
 # Playwright e2e test artifacts (screenshots, traces, error contexts)
 frontend/test-results/
 frontend/playwright-report/

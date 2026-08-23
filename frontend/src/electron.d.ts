@@ -14,6 +14,10 @@ declare global {
         fileName: string,
         bytes: Uint8Array,
       ) => Promise<{ status: 'saved'; filePath: string } | { status: 'cancelled' }>;
+      saveExportFile: (
+        fileName: string,
+        bytes: Uint8Array,
+      ) => Promise<{ status: 'saved'; filePath: string } | { status: 'cancelled' }>;
     };
   }
 }

@@ -64,7 +64,7 @@ test.describe.serial('Mark Tini desktop app', () => {
     // Either state is fine here - this test only asserts the renderer
     // mounted correctly, not that the backend has finished starting yet.
     await expect(
-      page.getByRole('button', { name: /^(Chọn tài liệu|Đang khởi động\.\.\.)$/ })
+      page.getByRole('button', { name: /^(Thêm file|Đang khởi động\.\.\.)$/ })
     ).toBeVisible();
     await expect(page.getByRole('button', { name: 'Chọn cả thư mục' })).toBeVisible();
     await expect(page.locator('input[type="file"][webkitdirectory]')).toHaveCount(1);
@@ -134,7 +134,7 @@ test.describe.serial('Mark Tini desktop app', () => {
   });
 
   test('converts a real PDF and shows the extracted text in the editor', async () => {
-    const uploadButton = page.getByRole('button', { name: 'Chọn tài liệu', exact: true });
+    const uploadButton = page.getByRole('button', { name: 'Thêm file', exact: true });
     // Generous timeout: covers real backend startup plus Docling model
     // warm-up (warm_up_models), which the renderer waits out via its own
     // /api/health poll rather than a fixed delay.
@@ -152,9 +152,27 @@ test.describe.serial('Mark Tini desktop app', () => {
     await expect(page.getByText(convertedFileName, { exact: true }).first()).toBeVisible({ timeout: 120_000 });
   });
 
-  test('exports the complete original PDF as a faithful Word document', async ({ browserName }, testInfo) => {
+  test('exports Docling content as an editable Word document from the sidebar', async ({ browserName }, testInfo) => {
     expect(browserName).toBe('chromium');
-    const exportButton = page.getByRole('button', { name: 'Xuất Word giống PDF', exact: true });
+    const exportButton = page.getByRole('button', { name: 'Xuất DOCX chỉnh sửa', exact: true });
+    await expect(exportButton).toBeEnabled({ timeout: 30_000 });
+
+    const exportedPath = testInfo.outputPath(convertedFileName.replace(/\.pdf$/i, '-chinh-sua.docx'));
+    fs.mkdirSync(path.dirname(exportedPath), { recursive: true });
+    await electronApp.evaluate(({ dialog }, targetPath) => {
+      dialog.showSaveDialog = async () => ({ canceled: false, filePath: targetPath });
+    }, exportedPath);
+    await exportButton.click();
+    await expect(page.getByText('Đã tạo DOCX có văn bản và bảng chỉnh sửa được.')).toBeVisible({ timeout: 30_000 });
+    await expect.poll(() => fs.existsSync(exportedPath)).toBe(true);
+    const bytes = fs.readFileSync(exportedPath);
+    expect(bytes.length).toBeGreaterThan(1_000);
+    expect(bytes.subarray(0, 2).toString('ascii')).toBe('PK');
+  });
+
+  test('keeps the optional image-faithful PDF export in the sidebar', async ({ browserName }, testInfo) => {
+    expect(browserName).toBe('chromium');
+    const exportButton = page.getByRole('button', { name: 'DOCX giống PDF (dạng ảnh)', exact: true });
     await expect(exportButton).toBeEnabled({ timeout: 30_000 });
 
     const exportedPath = testInfo.outputPath(convertedFileName.replace(/\.pdf$/i, '-giong-pdf.docx'));
@@ -165,9 +183,6 @@ test.describe.serial('Mark Tini desktop app', () => {
     await exportButton.click();
     await expect(page.getByText('Đã tạo file Word giữ nguyên nội dung và bố cục PDF.')).toBeVisible({ timeout: 30_000 });
     await expect.poll(() => fs.existsSync(exportedPath)).toBe(true);
-    const bytes = fs.readFileSync(exportedPath);
-    expect(bytes.length).toBeGreaterThan(1_000);
-    expect(bytes.subarray(0, 2).toString('ascii')).toBe('PK');
   });
 
   test('restores the original PDF, extracts the full crop, and resizes the result panel', async () => {
@@ -217,7 +232,7 @@ test.describe.serial('Mark Tini desktop app', () => {
   });
 
   test('queues multiple selected documents and keeps both results in history', async () => {
-    const uploadButton = page.getByRole('button', { name: 'Chọn tài liệu', exact: true });
+    const uploadButton = page.getByRole('button', { name: 'Thêm file', exact: true });
     await expect(uploadButton).toBeEnabled({ timeout: 30_000 });
 
     const sampleBuffer = fs.readFileSync(SAMPLE_PDF);
@@ -248,7 +263,7 @@ test.describe('Tini Suite product boundaries', () => {
       await expect(ocrPage.getByTestId('tini-ocr-shell')).toBeVisible();
       await expect(ocrPage.getByRole('heading', { name: 'Biến ảnh chụp tài liệu thành nội dung có thể chỉnh sửa' })).toBeVisible();
       await expect(ocrPage.getByRole('button', { name: 'Chọn ảnh' })).toBeVisible();
-      await expect(ocrPage.getByRole('button', { name: 'Chọn tài liệu' })).toHaveCount(0);
+      await expect(ocrPage.getByRole('button', { name: 'Thêm file' })).toHaveCount(0);
     } finally {
       await ocrApp.close();
     }
@@ -304,7 +319,11 @@ test.describe('Tini Suite product boundaries', () => {
       expect(recovered.pid).not.toBe(corePid);
       corePid = recovered.pid;
 
-      await markApp.close();
+      // Close the actual product window, matching the real user action and
+      // exercising window-all-closed -> lease disposal. ElectronApplication
+      // close() uses a CDP-wide shutdown command that can hang when two
+      // Electron instances share the same app identity.
+      await markPage.close();
       markClosed = true;
       const healthAfterMarkClosed = await ocrPage.evaluate(async () => {
         const response = await fetch('http://127.0.0.1:8088/api/health', {
@@ -314,7 +333,7 @@ test.describe('Tini Suite product boundaries', () => {
       });
       expect(healthAfterMarkClosed).toBe(true);
 
-      await ocrApp.close();
+      await ocrPage.close();
       ocrClosed = true;
       await expect.poll(() => processIsAlive(corePid), { timeout: 10_000 }).toBe(false);
     } finally {

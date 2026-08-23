@@ -1,142 +1,426 @@
-import { useMemo, useRef, useState } from 'react';
-import {
-  FileOutput,
-  FileText,
-  FolderOpen,
-  Images,
-  RotateCcw,
-  ScanText,
-  ShieldCheck,
-  Sparkles,
-  Upload,
-} from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AlertTriangle, Loader2, ScanText, Upload } from 'lucide-react';
+import Toast from '../../components/Toast';
+import type { ToastMessage } from '../../types';
 import { productStorageKey } from '../../shared/product';
-import './tini-ocr.css';
+import OcrSidebar from './OcrSidebar';
+import OcrToolbar from './OcrToolbar';
+import {
+  checkBackendHealth,
+  ConversionCancelledError,
+  exportImageOcr,
+  recognizeImages,
+  type ImageOcrPage,
+  type ImageOcrPreset,
+  type OcrExportFormat,
+} from '../../services/api';
 
-type ImageItem = {
+export type ImageItem = {
   id: string;
   name: string;
   size: number;
+  file: File;
+  previewUrl: string;
 };
 
-const ACCEPTED_IMAGE_TYPES = 'image/jpeg,image/png,image/tiff,image/bmp,image/webp';
+export type Stage = 'idle' | 'recognizing' | 'reviewing';
 
-function formatFileSize(bytes: number) {
-  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+const ACCEPTED_IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png']);
+const CONFIDENCE_WARNING_THRESHOLD = 0.6;
+
+const EXPORT_OPTIONS: { value: OcrExportFormat; label: string; extension: string }[] = [
+  { value: 'docx-editable', label: 'DOCX — văn bản chỉnh sửa được', extension: '.docx' },
+  { value: 'docx-faithful', label: 'DOCX — giữ nguyên ảnh gốc', extension: '.docx' },
+  { value: 'markdown', label: 'Markdown (.md)', extension: '.md' },
+  { value: 'txt', label: 'Văn bản thuần (.txt)', extension: '.txt' },
+];
+
+function fileExtension(name: string): string {
+  const index = name.lastIndexOf('.');
+  return index === -1 ? '' : name.slice(index).toLowerCase();
+}
+
+let previewSeed = 0;
+
+function createImageItem(file: File): ImageItem {
+  previewSeed += 1;
+  return {
+    id: `${file.name}-${file.size}-${file.lastModified}-${previewSeed}`,
+    name: file.name,
+    size: file.size,
+    file,
+    previewUrl: URL.createObjectURL(file),
+  };
 }
 
 export default function TiniOcrApp() {
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
   const [images, setImages] = useState<ImageItem[]>([]);
+  const [preset, setPreset] = useState<ImageOcrPreset>('balanced');
+  const [stage, setStage] = useState<Stage>('idle');
+  const [jobProgress, setJobProgress] = useState(0);
+  const [jobMessage, setJobMessage] = useState('');
+  const [pages, setPages] = useState<ImageOcrPage[]>([]);
+  const [exportFormat, setExportFormat] = useState<OcrExportFormat>('docx-editable');
+  const [isExporting, setIsExporting] = useState(false);
+  const [isBackendReady, setIsBackendReady] = useState(false);
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  const addToast = useCallback((type: ToastMessage['type'], message: string) => {
+    setToasts(prev => [...prev, { id: Date.now(), type, message }]);
+  }, []);
+
+  const removeToast = useCallback((id: number) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
+
+  // Tini Core (torch/EasyOCR/Docling) can take well over a minute to warm up
+  // on first launch — poll until ready instead of letting a click surface a
+  // raw connection error, mirroring Mark Tini's own startup gate in App.tsx.
+  useEffect(() => {
+    let cancelled = false;
+    let timerId: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      const ready = await checkBackendHealth()
+        .then(health => health.status === 'ready')
+        .catch(() => false);
+      if (!cancelled) {
+        setIsBackendReady(ready);
+        timerId = setTimeout(poll, ready ? 15000 : 1200);
+      }
+    };
+    poll();
+    return () => {
+      cancelled = true;
+      clearTimeout(timerId);
+    };
+  }, []);
 
   const totalSize = useMemo(
     () => images.reduce((total, image) => total + image.size, 0),
     [images],
   );
 
-  const handleFiles = (files: FileList | null) => {
-    if (!files) return;
-    const nextImages = Array.from(files).map((file, index) => ({
-      id: `${file.name}-${file.size}-${file.lastModified}-${index}`,
-      name: file.name,
-      size: file.size,
-    }));
-    setImages(nextImages);
-    localStorage.setItem(productStorageKey('tini-ocr', 'last-import-count'), String(nextImages.length));
-  };
+  // Object URLs are only released when the list they belong to is replaced
+  // or the product window closes — reviewing keeps referencing the same
+  // previews the whole time, so revoking on every render would break them.
+  useEffect(() => () => {
+    images.forEach(image => URL.revokeObjectURL(image.previewUrl));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const replaceImages = useCallback((nextFiles: File[]) => {
+    const accepted = nextFiles.filter(file => ACCEPTED_IMAGE_EXTENSIONS.has(fileExtension(file.name)));
+    if (accepted.length === 0) {
+      addToast('error', 'Chỉ hỗ trợ ảnh JPG hoặc PNG.');
+      return;
+    }
+    setImages(prev => {
+      prev.forEach(image => URL.revokeObjectURL(image.previewUrl));
+      return accepted.map(createImageItem);
+    });
+    setStage('idle');
+    setPages([]);
+    localStorage.setItem(productStorageKey('tini-ocr', 'last-import-count'), String(accepted.length));
+  }, [addToast]);
+
+  const handleFiles = useCallback((files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    replaceImages(Array.from(files));
+  }, [replaceImages]);
+
+  const moveImage = useCallback((index: number, direction: -1 | 1) => {
+    setImages(prev => {
+      const target = index + direction;
+      if (target < 0 || target >= prev.length) return prev;
+      const next = [...prev];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+  }, []);
+
+  const removeImage = useCallback((id: string) => {
+    setImages(prev => {
+      const removed = prev.find(image => image.id === id);
+      if (removed) URL.revokeObjectURL(removed.previewUrl);
+      return prev.filter(image => image.id !== id);
+    });
+  }, []);
+
+  const handleStartRecognition = useCallback(async () => {
+    if (images.length === 0) return;
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    setStage('recognizing');
+    setJobProgress(0);
+    setJobMessage('Đang chuẩn bị ảnh...');
+    try {
+      const result = await recognizeImages(
+        images.map(image => image.file),
+        {
+          preset,
+          signal: controller.signal,
+          onJobStatus: job => {
+            setJobProgress(job.progress);
+            setJobMessage(job.message);
+          },
+        },
+      );
+      setPages(result.pages);
+      setStage('reviewing');
+    } catch (err: unknown) {
+      setStage('idle');
+      if (err instanceof ConversionCancelledError) {
+        addToast('info', 'Đã hủy nhận dạng.');
+      } else {
+        addToast('error', err instanceof Error ? err.message : 'Nhận dạng ảnh thất bại.');
+      }
+    } finally {
+      abortControllerRef.current = null;
+    }
+  }, [images, preset, addToast]);
+
+  const handleCancelRecognition = useCallback(() => {
+    abortControllerRef.current?.abort();
+  }, []);
+
+  const updatePageText = useCallback((index: number, text: string) => {
+    setPages(prev => prev.map((page, i) => (i === index ? { ...page, text } : page)));
+  }, []);
+
+  const handleStartOver = useCallback(() => {
+    images.forEach(image => URL.revokeObjectURL(image.previewUrl));
+    setImages([]);
+    setPages([]);
+    setStage('idle');
+    setJobProgress(0);
+    setJobMessage('');
+  }, [images]);
+
+  const handleExport = useCallback(async () => {
+    if (pages.length === 0) return;
+    setIsExporting(true);
+    try {
+      const option = EXPORT_OPTIONS.find(item => item.value === exportFormat);
+      const extension = option?.extension ?? '.txt';
+      const blob = await exportImageOcr(
+        images.map(image => image.file),
+        pages.map(page => ({ filename: page.filename, text: page.text })),
+        exportFormat,
+      );
+      const fileName = `tini-ocr-ket-qua${extension}`;
+      if (window.documark?.saveExportFile) {
+        const result = await window.documark.saveExportFile(fileName, new Uint8Array(await blob.arrayBuffer()));
+        if (result.status === 'cancelled') {
+          addToast('info', 'Đã hủy lưu file.');
+        } else {
+          addToast('info', `Đã lưu: ${result.filePath}`);
+        }
+      } else {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+    } catch (err: unknown) {
+      addToast('error', err instanceof Error ? err.message : 'Không thể xuất kết quả OCR.');
+    } finally {
+      setIsExporting(false);
+    }
+  }, [images, pages, exportFormat, addToast]);
 
   return (
-    <div className="ocr-app" data-testid="tini-ocr-shell">
-      <header className="ocr-header">
-        <div className="ocr-brand">
-          <img className="ocr-brand-icon" src="/tini-ocr.png" alt="" aria-hidden="true" />
-          <div>
-            <p className="ocr-eyebrow">Tini Suite</p>
-            <h1>Tini OCR</h1>
-          </div>
-        </div>
-        <div className="ocr-local-badge"><ShieldCheck size={16} /> Xử lý hoàn toàn trên máy</div>
-      </header>
+    <div className="flex h-screen w-screen bg-neutral-100 overflow-hidden font-sans" data-testid="tini-ocr-shell">
+      <OcrSidebar
+        images={images}
+        totalSize={totalSize}
+        stage={stage}
+        isBackendReady={isBackendReady}
+        preset={preset}
+        onPresetChange={setPreset}
+        onFilesSelected={handleFiles}
+        onMoveImage={moveImage}
+        onRemoveImage={removeImage}
+      />
 
-      <main className="ocr-main">
-        <section className="ocr-hero" aria-labelledby="ocr-heading">
-          <div className="ocr-hero-copy">
-            <span className="ocr-kicker"><Sparkles size={15} /> Image to Text &amp; Word</span>
-            <h2 id="ocr-heading">Biến ảnh chụp tài liệu thành nội dung có thể chỉnh sửa</h2>
-            <p>
-              Nhập ảnh JPG, PNG hoặc nhiều trang liên tiếp. Tini OCR sẽ hiệu chỉnh ảnh,
-              nhận dạng tiếng Việt–Anh và chuẩn bị văn bản trước khi xuất Word.
-            </p>
-          </div>
+      <div className="min-w-0 flex-1 flex flex-col h-full overflow-hidden relative">
+        <OcrToolbar
+          stage={stage}
+          imageCount={images.length}
+          isBackendReady={isBackendReady}
+          onStartRecognition={handleStartRecognition}
+          exportFormat={exportFormat}
+          onExportFormatChange={setExportFormat}
+          exportOptions={EXPORT_OPTIONS}
+          onExport={handleExport}
+          isExporting={isExporting}
+          onStartOver={handleStartOver}
+        />
 
-          <div className="ocr-workflow" aria-label="Quy trình xử lý">
-            <div><Images size={20} /><strong>1. Chọn ảnh</strong><span>Một ảnh hoặc cả bộ trang</span></div>
-            <div><RotateCcw size={20} /><strong>2. Làm rõ</strong><span>Xoay, cắt và sửa phối cảnh</span></div>
-            <div><ScanText size={20} /><strong>3. Nhận dạng</strong><span>Rà soát chữ và độ tin cậy</span></div>
-            <div><FileOutput size={20} /><strong>4. Xuất file</strong><span>TXT, Markdown hoặc DOCX</span></div>
-          </div>
-        </section>
-
-        <section className="ocr-workspace" aria-labelledby="import-heading">
-          <div className="ocr-section-heading">
-            <div>
-              <p className="ocr-eyebrow">Bắt đầu</p>
-              <h2 id="import-heading">Chọn ảnh tài liệu</h2>
-            </div>
-            {images.length > 0 && (
-              <span className="ocr-selection-summary">{images.length} ảnh · {formatFileSize(totalSize)}</span>
-            )}
-          </div>
-
-          <input
-            ref={fileInputRef}
-            className="ocr-visually-hidden"
-            type="file"
-            accept={ACCEPTED_IMAGE_TYPES}
-            multiple
-            onChange={event => handleFiles(event.target.files)}
-          />
-
-          {images.length === 0 ? (
-            <div className="ocr-dropzone">
-              <div className="ocr-dropzone-icon" aria-hidden="true"><Upload size={30} /></div>
-              <h3>Ảnh chụp từ điện thoại của bạn</h3>
-              <p>Chọn JPG, PNG, TIFF, BMP hoặc WebP. Ảnh gốc sẽ không bị thay đổi.</p>
-              <button className="ocr-primary-button" type="button" onClick={() => fileInputRef.current?.click()}>
-                <Images size={18} /> Chọn ảnh
-              </button>
-              <button className="ocr-secondary-button" type="button" disabled title="Sẽ được kích hoạt cùng pipeline OCR">
-                <FolderOpen size={18} /> Chọn cả thư mục
-              </button>
-            </div>
-          ) : (
-            <div className="ocr-selection">
-              <ol className="ocr-file-list" aria-label="Ảnh đã chọn">
-                {images.map((image, index) => (
-                  <li key={image.id}>
-                    <span className="ocr-file-order">{index + 1}</span>
-                    <FileText size={18} aria-hidden="true" />
-                    <span className="ocr-file-name">{image.name}</span>
-                    <span className="ocr-file-size">{formatFileSize(image.size)}</span>
-                  </li>
-                ))}
-              </ol>
-              <div className="ocr-selection-actions">
-                <button className="ocr-secondary-button" type="button" onClick={() => fileInputRef.current?.click()}>
-                  <Images size={18} /> Chọn lại
-                </button>
-                <button className="ocr-primary-button" type="button" disabled title="Bộ máy OCR được kích hoạt ở bước triển khai tiếp theo">
-                  <ScanText size={18} /> Bắt đầu nhận dạng
-                </button>
+        <div className="flex-1 overflow-y-auto relative bg-neutral-100 p-4">
+          {stage === 'idle' && images.length === 0 && (
+            <div className="h-full flex flex-col items-center justify-center text-center gap-3">
+              <div className="w-14 h-14 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center">
+                <Upload size={26} />
               </div>
-              <p className="ocr-pipeline-note" role="status">
-                Giao diện Tini OCR đã sẵn sàng. Bộ máy nhận dạng offline sẽ được kích hoạt trong bước tiếp theo.
+              <h2 className="text-sm font-semibold text-gray-700">Chưa có ảnh nào</h2>
+              <p className="text-xs text-gray-500 max-w-xs">
+                Chọn ảnh JPG hoặc PNG từ thanh bên để bắt đầu nhận dạng văn bản.
               </p>
             </div>
           )}
-        </section>
-      </main>
+
+          {stage === 'idle' && images.length > 0 && (
+            <div className="h-full flex flex-col items-center justify-center text-center gap-3">
+              <div className="w-14 h-14 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center">
+                <ScanText size={26} />
+              </div>
+              <h2 className="text-sm font-semibold text-gray-700">{images.length} ảnh đã sẵn sàng</h2>
+              <p className="text-xs text-gray-500 max-w-xs">
+                Bấm "Bắt đầu nhận dạng" ở góc trên bên phải để tiếp tục.
+              </p>
+            </div>
+          )}
+
+          {stage === 'recognizing' && (
+            <div className="h-full flex items-center justify-center">
+              <div
+                role="status"
+                className="w-full max-w-sm p-5 flex flex-col items-center gap-3 bg-white border border-gray-200 rounded-lg shadow-sm"
+              >
+                <Loader2 size={22} className="animate-spin text-blue-600" />
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div
+                    className="bg-blue-600 rounded-full h-2 transition-all duration-300"
+                    style={{ width: `${jobProgress}%` }}
+                  />
+                </div>
+                <p className="text-xs text-gray-600">{jobMessage} ({jobProgress}%)</p>
+                <button
+                  type="button"
+                  onClick={handleCancelRecognition}
+                  className="px-3 py-1.5 rounded-md text-[13px] font-medium transition-colors border bg-white hover:bg-gray-50 text-gray-700 border-gray-200 shadow-sm"
+                >
+                  Hủy nhận dạng
+                </button>
+              </div>
+            </div>
+          )}
+
+          {stage === 'reviewing' && (
+            <ol className="flex flex-col gap-4 max-w-5xl mx-auto">
+              {pages.map((page, index) => {
+                const canOverlay = !page.recipe.includes('perspective-correction');
+                const previewUrl = images[index]?.previewUrl;
+                const isLowConfidence = page.confidence < CONFIDENCE_WARNING_THRESHOLD;
+                return (
+                  <li
+                    key={`${page.filename}-${index}`}
+                    className="grid grid-cols-[280px_1fr] gap-4 p-4 bg-white border border-gray-200 rounded-lg shadow-sm"
+                  >
+                    <div
+                      className="relative w-full overflow-hidden bg-gray-100 rounded-md"
+                      style={{ aspectRatio: `${page.width} / ${page.height}` }}
+                    >
+                      {previewUrl && (
+                        <img src={previewUrl} alt="" className="absolute inset-0 w-full h-full object-contain" />
+                      )}
+                      {canOverlay && (
+                        <svg
+                          className="ocr-page-overlay absolute inset-0 w-full h-full"
+                          viewBox={`0 0 ${page.width} ${page.height}`}
+                          preserveAspectRatio="none"
+                          aria-hidden="true"
+                        >
+                          {page.lines.map((line, lineIndex) => {
+                            const xs = line.box.map(point => point[0]);
+                            const ys = line.box.map(point => point[1]);
+                            const x = Math.min(...xs);
+                            const y = Math.min(...ys);
+                            const width = Math.max(...xs) - x;
+                            const height = Math.max(...ys) - y;
+                            const warn = line.confidence < CONFIDENCE_WARNING_THRESHOLD;
+                            return (
+                              <rect
+                                key={lineIndex}
+                                x={x}
+                                y={y}
+                                width={width}
+                                height={height}
+                                className={warn ? 'fill-amber-600/15 stroke-amber-600' : 'fill-blue-600/10 stroke-blue-600'}
+                                strokeWidth={2}
+                              />
+                            );
+                          })}
+                        </svg>
+                      )}
+                    </div>
+
+                    <div className="min-w-0 flex flex-col gap-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="min-w-0 truncate text-sm font-semibold text-gray-800" title={page.filename}>
+                          {page.filename}
+                        </span>
+                        {!page.error && (
+                          <span
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${
+                              isLowConfidence ? 'bg-amber-50 text-amber-700' : 'bg-green-50 text-green-700'
+                            }`}
+                          >
+                            {isLowConfidence && <AlertTriangle size={12} />}
+                            Độ tin cậy {Math.round(page.confidence * 100)}%
+                          </span>
+                        )}
+                      </div>
+
+                      {!canOverlay && !page.error && (
+                        <ul className="flex flex-wrap gap-1" aria-label={`Độ tin cậy từng dòng của ${page.filename}`}>
+                          {page.lines.map((line, lineIndex) => (
+                            <li
+                              key={lineIndex}
+                              className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+                                line.confidence < CONFIDENCE_WARNING_THRESHOLD
+                                  ? 'bg-amber-50 text-amber-700'
+                                  : 'bg-blue-50 text-blue-700'
+                              }`}
+                            >
+                              {Math.round(line.confidence * 100)}%
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+
+                      {page.error ? (
+                        <p
+                          role="alert"
+                          className="flex items-center gap-1.5 px-2.5 py-2 rounded-md bg-red-50 border border-red-100 text-red-700 text-xs"
+                        >
+                          <AlertTriangle size={14} /> Lỗi nhận dạng: {page.error}
+                        </p>
+                      ) : (
+                        <textarea
+                          value={page.text}
+                          onChange={event => updatePageText(index, event.target.value)}
+                          rows={8}
+                          aria-label={`Văn bản đã nhận dạng cho ${page.filename}`}
+                          className="flex-1 min-h-[160px] p-3 text-sm leading-relaxed bg-gray-50 border border-gray-200 rounded-md resize-y focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
+                        />
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+          )}
+        </div>
+      </div>
+
+      <Toast toasts={toasts} removeToast={removeToast} />
     </div>
   );
 }

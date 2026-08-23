@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import mimetypes
 import secrets
@@ -33,6 +34,15 @@ from .config import settings
 from .logging_utils import CorrelationIdMiddleware, configure_logging
 from .services import citation_service, history_service, translation_service
 from .services import pdf_to_word_service
+from .services import markdown_to_word_service
+from .services import ocr_export_service
+from .services.image_ocr_service import DEFAULT_IMAGE_OCR_ENGINE, SUPPORTED_IMAGE_OCR_ENGINES
+from .services.ocr_job_service import (
+    OcrInput,
+    OcrJobManager,
+    OcrJobNotFoundError,
+    OcrResultNotReadyError,
+)
 from .services.resource_scheduler import heavy_job_slot
 from .services.docling_service import (
     DEFAULT_OCR_LANG,
@@ -180,6 +190,10 @@ job_manager = ConversionJobManager(
     max_history_entries=settings.max_history_entries,
     max_job_records=settings.max_job_records,
 )
+ocr_job_manager = OcrJobManager(max_records=100)
+OCR_EXTENSIONS = {".png", ".jpg", ".jpeg"}
+MAX_OCR_BATCH = 50
+MAX_EDITABLE_DOCX_CHARACTERS = 10_000_000
 def _convert_pdf_to_word_serialized(pdf_path: Path, output_path: Path) -> pdf_to_word_service.PdfToWordResult:
     """Avoid multiple large raster exports competing for memory at once."""
     with heavy_job_slot("pdf-to-word"):
@@ -257,7 +271,7 @@ async def lifespan(_: FastAPI):
 app = FastAPI(
     title="Mark Tini Local API",
     description="Local document-to-Markdown conversion API",
-    version="1.5.0",
+    version="1.6.0",
     lifespan=lifespan,
 )
 
@@ -439,8 +453,49 @@ async def download_file(job_id: uuid.UUID) -> FileResponse:
     return FileResponse(path=file_path, filename=download_name, media_type="text/markdown")
 
 
-@secure_api.post("/export/pdf-to-word")
-async def export_pdf_to_word(file: UploadFile = File(...)) -> FileResponse:
+@secure_api.post("/export/markdown-to-word")
+async def export_markdown_to_word(
+    markdown: str = Form(...),
+    original_filename: str = Form("tai-lieu.pdf"),
+) -> FileResponse:
+    """Export reviewed Docling Markdown as native, editable Word content.
+
+    PDF uploads already pass through Docling before reaching the editor.  This
+    endpoint consumes that structured/reviewed Markdown, avoiding a duplicate
+    ML conversion and making the resulting paragraphs and tables editable.
+    """
+    if not markdown.strip():
+        raise HTTPException(status_code=400, detail="Nội dung tài liệu trống.")
+    if len(markdown) > MAX_EDITABLE_DOCX_CHARACTERS:
+        raise HTTPException(status_code=413, detail="Nội dung quá lớn để xuất DOCX.")
+    safe_filename = Path(original_filename).name[:255] or "tai-lieu.pdf"
+    output_path = settings.output_dir / f"editable-{uuid.uuid4()}.docx"
+    try:
+        await asyncio.to_thread(
+            markdown_to_word_service.convert_markdown_to_docx,
+            markdown,
+            output_path,
+            document_title=Path(safe_filename).stem,
+        )
+    except markdown_to_word_service.MarkdownToWordError as exc:
+        output_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        output_path.unlink(missing_ok=True)
+        logger.exception("Editable Word export failed")
+        raise HTTPException(status_code=500, detail="Không thể tạo DOCX chỉnh sửa được.") from exc
+
+    download_name = f"{Path(safe_filename).stem or 'tai-lieu'}-chinh-sua.docx"
+    return FileResponse(
+        path=output_path,
+        filename=download_name,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        background=BackgroundTask(output_path.unlink, missing_ok=True),
+    )
+
+
+@secure_api.post("/export/pdf-to-word-faithful")
+async def export_pdf_to_word_faithful(file: UploadFile = File(...)) -> FileResponse:
     """Create a visually faithful DOCX by placing every PDF page losslessly.
 
     This deliberately preserves appearance rather than editability: arbitrary
@@ -498,6 +553,160 @@ async def export_pdf_to_word(file: UploadFile = File(...)) -> FileResponse:
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         headers={"X-DocuMark-Page-Count": str(result.page_count)},
         background=BackgroundTask(result.output_path.unlink, missing_ok=True),
+    )
+
+
+async def _persist_ocr_uploads(files: list[UploadFile]) -> list[OcrInput]:
+    if not files:
+        raise HTTPException(status_code=400, detail="Chưa chọn ảnh OCR.")
+    if len(files) > MAX_OCR_BATCH:
+        raise HTTPException(status_code=413, detail=f"Mỗi lượt chỉ nhận tối đa {MAX_OCR_BATCH} ảnh.")
+    inputs: list[OcrInput] = []
+    try:
+        for upload in files:
+            original_filename, extension = _safe_original_filename(upload.filename)
+            if extension not in OCR_EXTENSIONS:
+                raise HTTPException(
+                    status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+                    detail="Tini OCR hiện nhận ảnh JPG và PNG.",
+                )
+            upload_path = settings.upload_dir / f"ocr-{uuid.uuid4()}{extension}"
+            try:
+                await asyncio.to_thread(
+                    _copy_upload_with_limit,
+                    upload.file,
+                    upload_path,
+                    settings.max_upload_bytes,
+                )
+                await asyncio.to_thread(_validate_uploaded_content, upload_path, extension)
+            except UploadTooLargeError as exc:
+                upload_path.unlink(missing_ok=True)
+                raise HTTPException(
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    detail=f"Ảnh vượt giới hạn {settings.max_upload_bytes // (1024 * 1024)} MiB.",
+                ) from exc
+            except UploadContentMismatchError as exc:
+                upload_path.unlink(missing_ok=True)
+                raise HTTPException(
+                    status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+                    detail=f"Nội dung ảnh không khớp định dạng {extension}.",
+                ) from exc
+            inputs.append(OcrInput(filename=original_filename, path=upload_path))
+        return inputs
+    except Exception:
+        for item in inputs:
+            item.path.unlink(missing_ok=True)
+        raise
+    finally:
+        await asyncio.gather(*(upload.close() for upload in files), return_exceptions=True)
+
+
+@secure_api.post("/ocr/jobs", status_code=status.HTTP_202_ACCEPTED)
+async def create_ocr_job(
+    files: list[UploadFile] = File(...),
+    preset: str = Form("balanced"),
+    engine: str = Form(DEFAULT_IMAGE_OCR_ENGINE),
+) -> dict[str, object]:
+    if preset not in {"original", "balanced", "high_contrast"}:
+        raise HTTPException(status_code=400, detail="Preset xử lý ảnh không hợp lệ.")
+    if engine not in SUPPORTED_IMAGE_OCR_ENGINES:
+        raise HTTPException(status_code=400, detail="Engine OCR không hợp lệ.")
+    inputs = await _persist_ocr_uploads(files)
+    return ocr_job_manager.create(inputs, preset=preset, engine=engine).public_state()
+
+
+def _get_ocr_job_or_404(job_id: uuid.UUID):
+    try:
+        return ocr_job_manager.get(str(job_id))
+    except OcrJobNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Không tìm thấy tác vụ OCR.") from exc
+
+
+@secure_api.get("/ocr/jobs/{job_id}")
+async def get_ocr_job(job_id: uuid.UUID) -> dict[str, object]:
+    return _get_ocr_job_or_404(job_id).public_state()
+
+
+@secure_api.get("/ocr/jobs/{job_id}/result")
+async def get_ocr_job_result(job_id: uuid.UUID) -> dict[str, object]:
+    _get_ocr_job_or_404(job_id)
+    try:
+        return ocr_job_manager.result(str(job_id))
+    except OcrResultNotReadyError as exc:
+        raise HTTPException(status_code=409, detail="Kết quả OCR chưa sẵn sàng.") from exc
+
+
+@secure_api.delete("/ocr/jobs/{job_id}")
+async def cancel_ocr_job(job_id: uuid.UUID) -> dict[str, object]:
+    _get_ocr_job_or_404(job_id)
+    return ocr_job_manager.cancel(str(job_id)).public_state()
+
+
+def _parse_reviewed_pages(raw: str) -> list[dict[str, object]]:
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="Nội dung review OCR không hợp lệ.") from exc
+    if not isinstance(parsed, list) or not parsed or len(parsed) > MAX_OCR_BATCH:
+        raise HTTPException(status_code=400, detail="Danh sách trang OCR không hợp lệ.")
+    pages: list[dict[str, object]] = []
+    total_characters = 0
+    for index, item in enumerate(parsed):
+        if not isinstance(item, dict):
+            raise HTTPException(status_code=400, detail="Trang OCR không hợp lệ.")
+        text = item.get("text", "")
+        filename = item.get("filename", f"Trang {index + 1}")
+        if not isinstance(text, str) or not isinstance(filename, str):
+            raise HTTPException(status_code=400, detail="Text OCR không hợp lệ.")
+        total_characters += len(text)
+        pages.append({"filename": Path(filename).name[:255], "text": text})
+    if total_characters > 5_000_000:
+        raise HTTPException(status_code=413, detail="Nội dung OCR quá lớn để xuất.")
+    return pages
+
+
+@secure_api.post("/ocr/export")
+async def export_ocr_result(
+    reviewed_pages: str = Form(...),
+    export_format: str = Form(...),
+    files: list[UploadFile] = File(...),
+) -> FileResponse:
+    pages = _parse_reviewed_pages(reviewed_pages)
+    if export_format not in ocr_export_service.SUPPORTED_OCR_EXPORTS:
+        raise HTTPException(status_code=400, detail="Định dạng xuất OCR không hợp lệ.")
+    if len(files) != len(pages):
+        raise HTTPException(status_code=400, detail="Số ảnh không khớp số trang OCR.")
+    inputs = await _persist_ocr_uploads(files)
+    suffix = ".docx" if export_format.startswith("docx") else ".md" if export_format == "markdown" else ".txt"
+    output_path = settings.output_dir / f"ocr-export-{uuid.uuid4()}{suffix}"
+    try:
+        await asyncio.to_thread(
+            ocr_export_service.build_ocr_export,
+            export_format,
+            pages,
+            output_path,
+            [item.path for item in inputs],
+        )
+    except ValueError as exc:
+        output_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        output_path.unlink(missing_ok=True)
+        logger.exception("OCR export failed")
+        raise HTTPException(status_code=500, detail="Không thể xuất kết quả OCR.") from exc
+    finally:
+        for item in inputs:
+            item.path.unlink(missing_ok=True)
+    media_type = (
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        if suffix == ".docx"
+        else "text/markdown" if suffix == ".md" else "text/plain"
+    )
+    return FileResponse(
+        output_path,
+        filename=f"tini-ocr{suffix}",
+        media_type=media_type,
+        background=BackgroundTask(output_path.unlink, missing_ok=True),
     )
 
 

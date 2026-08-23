@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import io
 import unittest
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
+from docx import Document
 
 import backend.src.main as main
 
@@ -133,16 +135,48 @@ class ApiSecurityTests(unittest.TestCase):
         response = self.client.post("/api/translate", json={"text": "some text"})
         self.assertEqual(response.status_code, 401)
 
-    def test_pdf_to_word_export_requires_session_token(self) -> None:
+    def test_faithful_pdf_to_word_export_requires_session_token(self) -> None:
         response = self.client.post(
-            "/api/export/pdf-to-word",
+            "/api/export/pdf-to-word-faithful",
             files={"file": ("paper.pdf", b"%PDF-1.4", "application/pdf")},
         )
         self.assertEqual(response.status_code, 401)
 
+    def test_editable_word_export_requires_session_token(self) -> None:
+        response = self.client.post(
+            "/api/export/markdown-to-word",
+            data={"markdown": "# Secret", "original_filename": "paper.pdf"},
+        )
+        self.assertEqual(response.status_code, 401)
+
+    def test_image_ocr_requires_session_token(self) -> None:
+        response = self.client.post(
+            "/api/ocr/jobs",
+            files={"files": ("photo.png", b"not trusted", "image/png")},
+        )
+        self.assertEqual(response.status_code, 401)
+
+    def test_image_ocr_rejects_mismatched_magic_and_cleans_upload(self) -> None:
+        before = set(main.settings.upload_dir.glob("*"))
+        response = self.client.post(
+            "/api/ocr/jobs",
+            headers=self.auth,
+            files={"files": ("photo.png", b"not a png", "image/png")},
+        )
+        self.assertEqual(response.status_code, 415)
+        self.assertEqual(before, set(main.settings.upload_dir.glob("*")))
+
+    def test_image_ocr_rejects_document_formats(self) -> None:
+        response = self.client.post(
+            "/api/ocr/jobs",
+            headers=self.auth,
+            files={"files": ("paper.pdf", b"%PDF-1.4", "application/pdf")},
+        )
+        self.assertEqual(response.status_code, 415)
+
     def test_pdf_to_word_export_rejects_non_pdf_before_processing(self) -> None:
         response = self.client.post(
-            "/api/export/pdf-to-word",
+            "/api/export/pdf-to-word-faithful",
             headers=self.auth,
             files={"file": ("paper.docx", b"PK", "application/octet-stream")},
         )
@@ -155,7 +189,7 @@ class ApiSecurityTests(unittest.TestCase):
         docx_before = set(main.settings.output_dir.glob("*.docx"))
 
         response = self.client.post(
-            "/api/export/pdf-to-word",
+            "/api/export/pdf-to-word-faithful",
             headers=self.auth,
             files={"file": ("fixture.pdf", sample_pdf.read_bytes(), "application/pdf")},
         )
@@ -165,6 +199,27 @@ class ApiSecurityTests(unittest.TestCase):
         self.assertEqual(response.headers["x-documark-page-count"], "1")
         self.assertIn("fixture-giong-pdf.docx", response.headers["content-disposition"])
         self.assertEqual(uploads_before, set(main.settings.upload_dir.glob("*")))
+        self.assertEqual(docx_before, set(main.settings.output_dir.glob("*.docx")))
+
+    def test_editable_word_export_contains_native_text_and_cleans_output(self) -> None:
+        docx_before = set(main.settings.output_dir.glob("*.docx"))
+        response = self.client.post(
+            "/api/export/markdown-to-word",
+            headers=self.auth,
+            data={
+                "markdown": "# Kết quả Docling\n\nVăn bản có thể chỉnh sửa.\n\n| A | B |\n|---|---|\n| 1 | 2 |",
+                "original_filename": "fixture.pdf",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.content.startswith(b"PK"))
+        self.assertIn("fixture-chinh-sua.docx", response.headers["content-disposition"])
+        document = Document(io.BytesIO(response.content))
+        text = "\n".join(paragraph.text for paragraph in document.paragraphs)
+        self.assertIn("Kết quả Docling", text)
+        self.assertIn("Văn bản có thể chỉnh sửa", text)
+        self.assertEqual(document.tables[0].cell(1, 0).text, "1")
         self.assertEqual(docx_before, set(main.settings.output_dir.glob("*.docx")))
 
     def test_root_serves_built_frontend_instead_of_api_message(self) -> None:

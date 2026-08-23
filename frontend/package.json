@@ -1,10 +1,10 @@
 {
-  "name": "mark-tini",
+  "name": "tini-suite",
   "private": true,
-  "version": "1.5.0",
+  "version": "1.6.0",
   "type": "module",
   "main": "dist-electron/main.cjs",
-  "description": "Mark Tini - Offline document converter with faithful PDF-to-Word export",
+  "description": "Tini Suite - Mark Tini Document Studio & Tini OCR Image to Text & Word",
   "author": "DHSystem",
   "scripts": {
     "dev": "vite",
@@ -18,13 +18,9 @@
     "build:electron": "npm run prepare:offline && tsc -b && vite build && electron-builder"
   },
   "build": {
-    "publish": {
-      "provider": "github",
-      "owner": "danghoangsqtt-sys",
-      "repo": "dhsystem_mdconverter"
-    },
-    "appId": "com.dhsystem.marktini",
-    "productName": "Mark Tini",
+    "appId": "com.dhsystem.tinisuite",
+    "productName": "Tini Suite",
+    "artifactName": "Tini Suite Setup ${version}.${ext}",
     "copyright": "Copyright © 2026 DHSystem",
     "asar": true,
     "win": {
@@ -34,11 +30,15 @@
       "icon": "build/icons/tini-suite.ico"
     },
     "nsis": {
-      "oneClick": true,
-      "perMachine": false,
-      "allowToChangeInstallationDirectory": false,
       "installerIcon": "build/icons/tini-suite.ico",
-      "uninstallerIcon": "build/icons/tini-suite.ico"
+      "uninstallerIcon": "build/icons/tini-suite.ico",
+      "include": "build/nsis/include.nsh",
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": false,
+      "createStartMenuShortcut": false,
+      "deleteAppDataOnUninstall": false
     },
     "files": [
       "dist/**/*",
@@ -49,7 +49,10 @@
         "from": "../backend",
         "to": "backend",
         "filter": [
-          "**/*"
+          "**/*",
+          "!tests{,/**/*}",
+          "!**/__pycache__{,/**/*}",
+          "!**/*.pyc"
         ]
       },
       {
@@ -65,17 +68,25 @@
         "filter": [
           "**/*"
         ]
+      },
+      {
+        "from": "build/icons/mark-tini.ico",
+        "to": "mark-tini.ico"
+      },
+      {
+        "from": "build/icons/tini-ocr.ico",
+        "to": "tini-ocr.ico"
       }
     ],
     "directories": {
-      "output": "release"
+      "output": "release",
+      "buildResources": "build"
     }
   },
   "dependencies": {
     "@uiw/react-md-editor": "^4.1.0",
     "autoprefixer": "^10.5.0",
     "axios": "^1.16.1",
-    "electron-updater": "^6.8.9",
     "lucide-react": "^1.16.0",
     "pdfjs-dist": "5.4.296",
     "postcss": "^8.5.14",

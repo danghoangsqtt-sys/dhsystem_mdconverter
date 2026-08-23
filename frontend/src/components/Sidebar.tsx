@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { Upload, HelpCircle, FilePlus, RefreshCcw, FolderOpen, Box, History, Trash2, Languages, Table2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Upload, HelpCircle, FilePlus, RefreshCcw, FolderOpen, Box, History, Trash2, Languages, Table2, ChevronLeft, ChevronRight, FileDown, Loader2, ScanText } from 'lucide-react';
 import type { OcrLang, TableMode, HistoryEntry } from '../services/api';
 import { OCR_LANG_OPTIONS, TABLE_MODE_OPTIONS } from '../services/api';
 
@@ -26,6 +26,7 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ icon: Icon, label, onClick, d
 );
 
 type BackendStatus = 'connecting' | 'starting' | 'loading_models' | 'ready' | 'error' | 'unreachable';
+type ExportActionState = 'disabled' | 'ready' | 'running';
 
 interface SidebarProps {
   onFilesUpload: (files: File[]) => void;
@@ -42,6 +43,10 @@ interface SidebarProps {
   history: HistoryEntry[];
   onLoadHistoryItem: (jobId: string) => void;
   onDeleteHistoryItem: (jobId: string) => void;
+  onExportEditableWord: () => void;
+  onExportFaithfulWord: () => void;
+  editableWordState: ExportActionState;
+  faithfulWordState: ExportActionState;
 }
 
 const formatHistoryDate = (iso: string): string => {
@@ -78,6 +83,10 @@ const Sidebar: React.FC<SidebarProps> = ({
   history,
   onLoadHistoryItem,
   onDeleteHistoryItem,
+  onExportEditableWord,
+  onExportFaithfulWord,
+  editableWordState,
+  faithfulWordState,
 }) => {
   const pdfInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
@@ -209,9 +218,35 @@ const Sidebar: React.FC<SidebarProps> = ({
                 <Upload size={20} className="group-hover:scale-110 transition-transform flex-shrink-0" />
               )}
               <span className="min-w-0 truncate whitespace-nowrap font-semibold">
-                {isProcessing ? 'Đang xử lý...' : !backendReady ? 'Đang khởi động...' : 'Chọn tài liệu'}
+                {isProcessing ? 'Đang xử lý...' : !backendReady ? 'Đang khởi động...' : 'Thêm file'}
               </span>
             </button>
+
+            <div className="mt-2 rounded-lg border border-blue-100 bg-gradient-to-br from-blue-50 to-white p-2" data-testid="sidebar-word-export">
+              <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-blue-700">
+                <ScanText size={13} /> PDF / Docling → Word
+              </div>
+              <button
+                type="button"
+                onClick={onExportEditableWord}
+                disabled={editableWordState !== 'ready'}
+                title="Xuất nội dung Docling đang mở thành đoạn văn, tiêu đề và bảng Word chỉnh sửa được"
+                className="flex w-full items-center justify-center gap-2 rounded-md border border-blue-200 bg-blue-600 px-2 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-100 disabled:text-gray-400"
+              >
+                {editableWordState === 'running' ? <Loader2 size={15} className="animate-spin" /> : <FileDown size={15} />}
+                <span>{editableWordState === 'running' ? 'Đang tạo DOCX...' : 'Xuất DOCX chỉnh sửa'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={onExportFaithfulWord}
+                disabled={faithfulWordState !== 'ready'}
+                title="Tùy chọn lưu từng trang PDF dưới dạng ảnh để giữ bố cục tuyệt đối; chữ trong mode này không chỉnh sửa riêng được"
+                className="mt-1.5 flex w-full items-center justify-center gap-2 rounded-md border border-gray-200 bg-white px-2 py-1.5 text-[11px] font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {faithfulWordState === 'running' ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />}
+                <span>{faithfulWordState === 'running' ? 'Đang giữ bố cục...' : 'DOCX giống PDF (dạng ảnh)'}</span>
+              </button>
+            </div>
 
             <button
               type="button"
@@ -339,7 +374,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                 </div>
                 <div>
                   <p className="font-bold text-gray-800 leading-tight">Mark Tini</p>
-                  <p className="text-[10px] text-gray-400">Phiên bản 1.5.0</p>
+                  <p className="text-[10px] text-gray-400">Phiên bản 1.6.0</p>
                 </div>
               </div>
 

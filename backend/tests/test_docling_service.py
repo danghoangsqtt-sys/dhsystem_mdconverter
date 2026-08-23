@@ -73,11 +73,11 @@ class DoclingServiceLargePdfTests(unittest.TestCase):
 
     def test_long_pdf_is_converted_in_bounded_ordered_chunks(self) -> None:
         converter = _ChunkConverter()
-        with patch.object(docling_service, "_get_pdf_page_count", return_value=10):
+        with patch.object(docling_service, "_get_pdf_page_count", return_value=20):
             markdown = docling_service._convert_pdf_in_chunks(converter, self.pdf_path)
 
-        self.assertEqual(converter.page_ranges, [(1, 8), (9, 10)])
-        self.assertEqual(markdown, "pages-1-8\n\npages-9-10")
+        self.assertEqual(converter.page_ranges, [(1, 16), (17, 20)])
+        self.assertEqual(markdown, "pages-1-16\n\npages-17-20")
 
     def test_partial_range_is_split_and_single_page_uses_raster_fallback(self) -> None:
         converter = _ChunkConverter(failing_page=3)
@@ -119,7 +119,7 @@ class DoclingServiceLargePdfTests(unittest.TestCase):
         image_path = Path(self.temp_dir.name) / "region.png"
         image_path.write_bytes(b"png")
 
-        with patch.object(docling_service, "_get_region_reader", return_value=reader):
+        with patch.object(docling_service, "get_region_reader", return_value=reader):
             text = docling_service._extract_region_text(image_path, "en")
 
         self.assertEqual(text, "Small bullet line\n£ 9")

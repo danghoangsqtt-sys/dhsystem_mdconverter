@@ -2,21 +2,6 @@ import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import path from 'node:path';
 import { spawn, ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
-// Default-import instead of `import { autoUpdater } from 'electron-updater'`:
-// electron-updater exports autoUpdater via a lazy Object.defineProperty
-// getter, which some ESM/CJS interop paths resolve unreliably as a named
-// import. Grabbing the whole CJS module.exports object (always available as
-// the default export) sidesteps that entirely.
-//
-// Deliberately NOT destructured here (`const { autoUpdater } = ...`):
-// reading that getter is what constructs the updater, which reads
-// `app.getVersion()` - under `vite-plugin-electron`'s dev launcher that runs
-// before Electron's `app` is in a state electron-updater expects, crashing
-// the whole process at startup. Accessing `electronUpdater.autoUpdater` only
-// at the call site below, inside the `app.isPackaged` + try/catch guard,
-// keeps that access exactly where it's meaningful (a packaged build) and
-// never lets it crash dev mode.
-import electronUpdater from 'electron-updater';
 import { PRODUCT_METADATA, productIdFromArguments } from '../src/shared/product';
 import { TiniCoreSupervisor } from './coreSupervisor';
 
@@ -245,7 +230,7 @@ ipcMain.handle(
 
     const owner = BrowserWindow.fromWebContents(event.sender);
     const options = {
-      title: 'Lưu file Word giống PDF',
+      title: 'Lưu tài liệu Microsoft Word',
       defaultPath: path.join(app.getPath('documents'), safeName),
       filters: [{ name: 'Tài liệu Microsoft Word', extensions: ['docx'] }],
     };
@@ -254,6 +239,42 @@ ipcMain.handle(
       : await dialog.showSaveDialog(options);
     if (selection.canceled || !selection.filePath) return { status: 'cancelled' };
 
+    await fs.promises.writeFile(selection.filePath, data);
+    return { status: 'saved', filePath: selection.filePath };
+  },
+);
+
+ipcMain.handle(
+  'save-export-file',
+  async (event, requestedName: unknown, bytes: unknown): Promise<SaveWordFileResult> => {
+    if (typeof requestedName !== 'string') throw new Error('Tên file xuất không hợp lệ.');
+    const safeName = path.basename(requestedName.trim());
+    const extension = path.extname(safeName).toLowerCase();
+    const filters: Record<string, { name: string; extensions: string[] }> = {
+      '.txt': { name: 'Văn bản thuần', extensions: ['txt'] },
+      '.md': { name: 'Markdown', extensions: ['md'] },
+      '.docx': { name: 'Tài liệu Microsoft Word', extensions: ['docx'] },
+    };
+    if (!safeName || safeName.length > 255 || !filters[extension]) {
+      throw new Error('Tên hoặc định dạng file xuất không hợp lệ.');
+    }
+    const data = bytes instanceof Uint8Array
+      ? bytes
+      : bytes instanceof ArrayBuffer
+        ? new Uint8Array(bytes)
+        : null;
+    if (!data || data.byteLength === 0) throw new Error('Dữ liệu file xuất trống hoặc không hợp lệ.');
+
+    const owner = BrowserWindow.fromWebContents(event.sender);
+    const options = {
+      title: 'Lưu kết quả Tini OCR',
+      defaultPath: path.join(app.getPath('documents'), safeName),
+      filters: [filters[extension]],
+    };
+    const selection = owner
+      ? await dialog.showSaveDialog(owner, options)
+      : await dialog.showSaveDialog(options);
+    if (selection.canceled || !selection.filePath) return { status: 'cancelled' };
     await fs.promises.writeFile(selection.filePath, data);
     return { status: 'saved', filePath: selection.filePath };
   },
@@ -333,15 +354,4 @@ app.whenReady().then(async () => {
   // especially on a first run that downloads OCR models).
   createWindow();
 
-  // Only meaningful for a packaged, installed build (there's no update feed
-  // to check against in dev, and unpackaged runs can't self-replace anyway).
-  if (app.isPackaged) {
-    try {
-      electronUpdater.autoUpdater.checkForUpdatesAndNotify().catch((err) => {
-        safeLog(`[AutoUpdater] Check failed: ${err instanceof Error ? err.message : err}`);
-      });
-    } catch (err) {
-      safeLog(`[AutoUpdater] Failed to start update check: ${err instanceof Error ? err.message : err}`);
-    }
-  }
 });

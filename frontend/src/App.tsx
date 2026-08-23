@@ -14,7 +14,8 @@ import {
   fetchHistory,
   fetchHistoryItem,
   fetchHistoryOriginal,
-  exportPdfToWord,
+  exportMarkdownToWord,
+  exportPdfToFaithfulWord,
   deleteHistoryItem,
   cancelConversionJob,
   verifyCitation,
@@ -203,7 +204,7 @@ const App: React.FC = () => {
   const [tableMode, setTableMode] = useState<TableMode>('accurate');
   const [sourceFileMetadata, setSourceFileMetadata] = useState<SourceFileMetadata | null>(null);
   const sourceHistoryJobIdRef = useRef<string | null>(null);
-  const [isExportingWord, setIsExportingWord] = useState(false);
+  const [wordExportMode, setWordExportMode] = useState<'editable' | 'faithful' | null>(null);
 
   const addToast = useCallback((type: 'success' | 'error' | 'info', message: string) => {
     dispatch({ type: 'ADD_TOAST', payload: { id: Date.now(), type, message } });
@@ -780,9 +781,49 @@ const App: React.FC = () => {
     originalInputRef.current?.click();
   }, [restoreOriginalFile, sourceFileMetadata]);
 
-  const handleExportWord = useCallback(async () => {
-    if (isExportingWord) return;
-    setIsExportingWord(true);
+  const saveWordBlob = useCallback(async (wordBlob: Blob, wordFileName: string): Promise<boolean> => {
+    if (window.documark?.saveWordFile) {
+      const result = await window.documark.saveWordFile(
+        wordFileName,
+        new Uint8Array(await wordBlob.arrayBuffer()),
+      );
+      return result.status !== 'cancelled';
+    }
+    const url = URL.createObjectURL(wordBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = wordFileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    return true;
+  }, []);
+
+  const handleExportEditableWord = useCallback(async () => {
+    if (wordExportMode || !state.content.trim()) return;
+    setWordExportMode('editable');
+    try {
+      const originalFilename = sourceFileMetadata?.originalFilename || state.fileName || 'tai-lieu.md';
+      addToast('info', 'Đang tạo DOCX chỉnh sửa được từ nội dung Docling đã duyệt.');
+      const wordBlob = await exportMarkdownToWord(state.content, originalFilename);
+      const wordFileName = `${originalFilename.replace(/\.[^.]+$/i, '')}-chinh-sua.docx`;
+      if (!await saveWordBlob(wordBlob, wordFileName)) {
+        addToast('info', 'Đã hủy lưu file Word.');
+        return;
+      }
+      addToast('success', 'Đã tạo DOCX có văn bản và bảng chỉnh sửa được.');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Không thể tạo DOCX chỉnh sửa được.';
+      addToast('error', message);
+    } finally {
+      setWordExportMode(null);
+    }
+  }, [addToast, saveWordBlob, sourceFileMetadata, state.content, state.fileName, wordExportMode]);
+
+  const handleExportFaithfulWord = useCallback(async () => {
+    if (wordExportMode) return;
+    setWordExportMode('faithful');
     try {
       let pdfFile = sourceFile;
       const sourceHistoryJobId = sourceHistoryJobIdRef.current;
@@ -800,35 +841,20 @@ const App: React.FC = () => {
       }
 
       addToast('info', 'Đang tạo Word giữ nguyên từng trang PDF. Tài liệu dài có thể cần vài phút.');
-      const wordBlob = await exportPdfToWord(pdfFile);
+      const wordBlob = await exportPdfToFaithfulWord(pdfFile);
       const wordFileName = `${pdfFile.name.replace(/\.pdf$/i, '')}-giong-pdf.docx`;
-      if (window.documark?.saveWordFile) {
-        const result = await window.documark.saveWordFile(
-          wordFileName,
-          new Uint8Array(await wordBlob.arrayBuffer()),
-        );
-        if (result.status === 'cancelled') {
-          addToast('info', 'Đã hủy lưu file Word.');
-          return;
-        }
-      } else {
-        const url = URL.createObjectURL(wordBlob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = wordFileName;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      if (!await saveWordBlob(wordBlob, wordFileName)) {
+        addToast('info', 'Đã hủy lưu file Word.');
+        return;
       }
       addToast('success', 'Đã tạo file Word giữ nguyên nội dung và bố cục PDF.');
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Không thể xuất PDF sang Word.';
       addToast('error', message);
     } finally {
-      setIsExportingWord(false);
+      setWordExportMode(null);
     }
-  }, [addToast, isExportingWord, sourceFile, sourceFileMetadata]);
+  }, [addToast, saveWordBlob, sourceFile, sourceFileMetadata, wordExportMode]);
 
   const resetDocument = useCallback(() => {
     // Invalidate any in-flight conversion so its eventual response can't
@@ -926,6 +952,21 @@ const App: React.FC = () => {
         history={state.history}
         onLoadHistoryItem={handleLoadHistoryItem}
         onDeleteHistoryItem={handleDeleteHistoryItem}
+        onExportEditableWord={handleExportEditableWord}
+        onExportFaithfulWord={handleExportFaithfulWord}
+        editableWordState={wordExportMode === 'editable'
+          ? 'running'
+          : state.backend.status === 'ready' && !state.processingState.isProcessing && Boolean(state.content.trim())
+            ? 'ready'
+            : 'disabled'}
+        faithfulWordState={wordExportMode === 'faithful'
+          ? 'running'
+          : state.backend.status === 'ready'
+            && !state.processingState.isProcessing
+            && (Boolean(sourceFile?.name.toLowerCase().endsWith('.pdf'))
+              || Boolean(sourceFileMetadata?.originalFilename.toLowerCase().endsWith('.pdf')))
+              ? 'ready'
+              : 'disabled'}
       />
 
       <div className="min-w-0 flex-1 flex flex-col h-full overflow-hidden relative">
@@ -946,15 +987,6 @@ const App: React.FC = () => {
           onPreviewModeChange={setPreviewMode}
           sourceFileMetadata={sourceFileMetadata}
           onOpenOriginal={handleOpenOriginal}
-          onExportWord={handleExportWord}
-          wordExportState={isExportingWord
-            ? 'running'
-            : state.backend.status === 'ready'
-              && !state.processingState.isProcessing
-              && (Boolean(sourceFile?.name.toLowerCase().endsWith('.pdf'))
-                || Boolean(sourceFileMetadata?.originalFilename.toLowerCase().endsWith('.pdf')))
-              ? 'ready'
-              : 'disabled'}
         />
 
         <div className="flex-1 overflow-hidden relative bg-neutral-100 p-4">
@@ -1061,7 +1093,8 @@ const App: React.FC = () => {
               <div className="mt-4">
                 <h4 className="font-semibold text-neutral-800 mb-2">Cách sử dụng:</h4>
                 <ol className="list-decimal pl-5 space-y-2 text-sm text-neutral-600">
-                  <li>Nhấn <strong>Chọn tài liệu</strong> để chọn một hoặc nhiều tệp PDF, DOCX, PPTX hay HTML.</li>
+                  <li>Nhấn <strong>Thêm file</strong> để chọn một hoặc nhiều tệp PDF, DOCX, PPTX hay HTML.</li>
+                  <li>Sau khi Docling xử lý xong, dùng <strong>Xuất DOCX chỉnh sửa</strong> ngay dưới nút Thêm file để tạo Word có chữ và bảng biên soạn được.</li>
                   <li>Nhấn <strong>Chọn cả thư mục</strong> để xếp hàng mọi tài liệu được hỗ trợ trong thư mục và các thư mục con.</li>
                   <li>Các tệp được xử lý tuần tự để tránh thiếu RAM; hộp tiến độ cho biết tệp hiện tại và tổng số tệp.</li>
                   <li>PDF dài được tự chia thành các cụm trang và kiểm tra đủ trang trước khi lưu kết quả.</li>
