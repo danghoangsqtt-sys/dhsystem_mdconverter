@@ -22,10 +22,8 @@ Dự án Tini Suite có đầy đủ tài liệu cho cả người dùng cuối 
 
 | Tài liệu | Nội dung | Link |
 |----------|---------|------|
-| 📖 **Hướng dẫn sử dụng v1.3.0** | Cách sử dụng từng tính năng, xử lý lỗi, FAQ | [📖 Mở](docs/huong-dan-su-dung-v1.3.0.md) |
-| 🎓 **Báo cáo kỹ thuật v1.3.0** | Chi tiết implementation, tính năng mới, fix bugs, test coverage | [📋 Xem](docs/bao-cao-ky-thuat-v1.3.0.md) |
-
-> Hai tài liệu trên chưa cập nhật tới v1.6.0 (Tini Suite/Tini OCR) — dùng [CHANGELOG.md](CHANGELOG.md) cho các thay đổi mới nhất.
+| 📖 **Hướng dẫn sử dụng v1.6.0** | Cách sử dụng từng tính năng, xử lý lỗi, FAQ | [📖 Mở](docs/huong-dan-su-dung-v1.6.0.md) |
+| 🎓 **Báo cáo kỹ thuật v1.6.0** | Chi tiết implementation, tính năng mới, fix bugs, test coverage | [📋 Xem](docs/bao-cao-ky-thuat-v1.6.0.md) |
 
 ### 👨‍💻 Cho nhà phát triển
 
@@ -119,8 +117,8 @@ Thiết kế chi tiết và các invariant nằm tại [ARCHITECTURE.md](.viepil
 
 Phiên bản hoàn thiện hiện tại: 1.6.0.
 
-- [Báo cáo kỹ thuật v1.3.0](docs/bao-cao-ky-thuat-v1.3.0.md)
-- [Hướng dẫn sử dụng v1.3.0](docs/huong-dan-su-dung-v1.3.0.md)
+- [Báo cáo kỹ thuật v1.6.0](docs/bao-cao-ky-thuat-v1.6.0.md)
+- [Hướng dẫn sử dụng v1.6.0](docs/huong-dan-su-dung-v1.6.0.md)
 - [Luồng hoạt động dự án](docs/luong-hoat-dong-du-an.md)
 - [Changelog](CHANGELOG.md)
 
@@ -147,7 +145,7 @@ Model mặc định hỗ trợ tiếng Việt và có thể thay bằng biến m
 
 ### Hướng dẫn sử dụng
 
-Xem [**📖 Hướng dẫn sử dụng đầy đủ v1.3.0**](docs/huong-dan-su-dung-v1.3.0.md) để biết chi tiết.
+Xem [**📖 Hướng dẫn sử dụng đầy đủ v1.6.0**](docs/huong-dan-su-dung-v1.6.0.md) để biết chi tiết.
 
 **Quick start** — 5 bước cơ bản:
 
@@ -268,7 +266,7 @@ Chi tiết kiến trúc: [ARCHITECTURE.md](.viepilot/ARCHITECTURE.md) | [SPEC v1
 docling-env\Scripts\python.exe -m unittest discover -s backend\tests -v
 ```
 
-**Coverage:** 109 tests / 14 module, gồm:
+**Coverage:** 117 tests / 15 module, gồm:
 - API token validation, path traversal
 - Job queue (Mark Tini), cancel semantics, capacity limits
 - Storage atomicity, cleanup orphaned outputs/uploads, startup cleanup
@@ -340,7 +338,7 @@ Kiểm tra:
 
 Gặp sự cố? Hãy:
 
-1. Kiểm tra [Troubleshooting](docs/huong-dan-su-dung-v1.3.0.md#-xử-lý-sự-cố-thường-gặp) trong hướng dẫn
+1. Kiểm tra [Troubleshooting](docs/huong-dan-su-dung-v1.6.0.md#11-xử-lý-sự-cố-thường-gặp) trong hướng dẫn
 2. Xem file log tại `%APPDATA%\Tini Suite\data\logs\backend.log`
 3. Mở [Issue trên GitHub](../../issues) với:
    - Phiên bản ứng dụng (xem trong About)
@@ -379,7 +377,7 @@ Tini Suite được phát hành dưới license **MIT**. Xem [LICENSE](LICENSE) 
 
 ## 🔗 Liên kết nhanh
 
-- 📖 [Hướng dẫn sử dụng](docs/huong-dan-su-dung-v1.3.0.md)
+- 📖 [Hướng dẫn sử dụng](docs/huong-dan-su-dung-v1.6.0.md)
 - 🏗️ [Kiến trúc hệ thống](docs/luong-hoat-dong-du-an.md)
 - 🔐 [Bảo mật & SPEC](.viepilot/phases/phase-8-reliability-security-offline/SPEC.md)
 - 📝 [Changelog](CHANGELOG.md)

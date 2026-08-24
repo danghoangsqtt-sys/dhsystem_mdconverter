@@ -39,6 +39,7 @@ from .services import ocr_export_service
 from .services.image_ocr_service import DEFAULT_IMAGE_OCR_ENGINE, SUPPORTED_IMAGE_OCR_ENGINES
 from .services.ocr_job_service import (
     OcrInput,
+    OcrJobCapacityError,
     OcrJobManager,
     OcrJobNotFoundError,
     OcrResultNotReadyError,
@@ -190,7 +191,8 @@ job_manager = ConversionJobManager(
     max_history_entries=settings.max_history_entries,
     max_job_records=settings.max_job_records,
 )
-ocr_job_manager = OcrJobManager(max_records=100)
+MAX_ACTIVE_OCR_JOBS = 20
+ocr_job_manager = OcrJobManager(max_records=100, max_active_jobs=MAX_ACTIVE_OCR_JOBS)
 OCR_EXTENSIONS = {".png", ".jpg", ".jpeg"}
 MAX_OCR_BATCH = 50
 MAX_EDITABLE_DOCX_CHARACTERS = 10_000_000
@@ -612,7 +614,15 @@ async def create_ocr_job(
     if engine not in SUPPORTED_IMAGE_OCR_ENGINES:
         raise HTTPException(status_code=400, detail="Engine OCR không hợp lệ.")
     inputs = await _persist_ocr_uploads(files)
-    return ocr_job_manager.create(inputs, preset=preset, engine=engine).public_state()
+    try:
+        return ocr_job_manager.create(inputs, preset=preset, engine=engine).public_state()
+    except OcrJobCapacityError as exc:
+        for item in inputs:
+            item.path.unlink(missing_ok=True)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Hàng đợi OCR đang đầy. Vui lòng chờ các tác vụ hiện tại hoàn tất.",
+        ) from exc
 
 
 def _get_ocr_job_or_404(job_id: uuid.UUID):

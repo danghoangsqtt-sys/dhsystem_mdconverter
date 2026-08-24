@@ -59,16 +59,29 @@ class OcrResultNotReadyError(RuntimeError):
     pass
 
 
+class OcrJobCapacityError(RuntimeError):
+    pass
+
+
+_TERMINAL_STATUSES = {"complete", "cancelled", "error"}
+
+
 class OcrJobManager:
-    def __init__(self, max_records: int = 100) -> None:
+    def __init__(self, max_records: int = 100, *, max_active_jobs: int = 20) -> None:
         self._jobs: dict[str, OcrJob] = {}
         self._lock = threading.RLock()
         self._executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="tini-ocr")
         self._max_records = max_records
+        self._max_active_jobs = max_active_jobs
 
     def create(self, inputs: list[OcrInput], *, preset: str, engine: str) -> OcrJob:
         job = OcrJob(str(uuid.uuid4()), inputs, preset, engine)
         with self._lock:
+            active = sum(1 for existing in self._jobs.values() if existing.status not in _TERMINAL_STATUSES)
+            if active >= self._max_active_jobs:
+                raise OcrJobCapacityError(
+                    f"{active} Tini OCR jobs already in progress (limit {self._max_active_jobs})"
+                )
             self._jobs[job.job_id] = job
             self._trim_completed_records()
         self._executor.submit(self._run, job)
@@ -94,7 +107,7 @@ class OcrJobManager:
 
     def cancel(self, job_id: str) -> OcrJob:
         job = self.get(job_id)
-        if job.status in {"complete", "cancelled", "error"}:
+        if job.status in _TERMINAL_STATUSES:
             return job
         job.cancel_event.set()
         self._update(job, status="cancelling", message="Đang dừng sau ảnh hiện tại.")
@@ -161,7 +174,7 @@ class OcrJobManager:
         if len(self._jobs) <= self._max_records:
             return
         terminal = [
-            job for job in self._jobs.values() if job.status in {"complete", "cancelled", "error"}
+            job for job in self._jobs.values() if job.status in _TERMINAL_STATUSES
         ]
         terminal.sort(key=lambda item: item.updated_at)
         for job in terminal[: max(0, len(self._jobs) - self._max_records)]:
