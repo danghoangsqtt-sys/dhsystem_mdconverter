@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from backend.src.services import history_service
+from backend.src.services.mark_tini import history_service
 
 
 class HistoryServiceTests(unittest.TestCase):

@@ -3,6 +3,12 @@ Tất cả các thay đổi của dự án sẽ được cập nhật tại đâ
 
 ## [Unreleased]
 
+### Removed
+- **DOCX giống PDF (dạng ảnh):** Bỏ hẳn chế độ xuất Word bằng cách render từng trang PDF thành ảnh toàn trang (`pdf_to_word_service.py` và route `/export/pdf-to-word-faithful`); không sửa chữ được và không còn cần thiết sau khi DOCX chỉnh sửa hỗ trợ đầy đủ hình ảnh/sơ đồ thật (xem mục Changed).
+
+### Changed
+- **DOCX chỉnh sửa:** Docling giờ giữ lại bitmap của mọi hình ảnh/sơ đồ khối trong PDF (`generate_picture_images`) và nhúng thật (base64) vào Markdown xuất ra thay vì để lại comment placeholder `<!-- image -->`. DOCX chỉnh sửa dựng các ảnh này thành ảnh Word thật, tự co theo chiều rộng trang và được căn giữa. Sidebar chỉ còn một nút xuất Word duy nhất, đổi nhãn thành **"Xuất Word"**.
+
 ## [1.6.0] — 2026-08-21
 
 ### Added

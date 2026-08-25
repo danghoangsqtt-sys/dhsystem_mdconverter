@@ -2,7 +2,7 @@ import threading
 import time
 import unittest
 
-from backend.src.services.resource_scheduler import (
+from backend.src.services.shared.resource_scheduler import (
     heavy_job_slot,
     reset_scheduler_metrics_for_test,
     scheduler_snapshot,

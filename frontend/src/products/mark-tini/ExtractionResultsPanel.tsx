@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { GripHorizontal, Search, PlusSquare, X } from 'lucide-react';
-import type { ExtractionResult } from '../types';
+import type { ExtractionResult } from './types';
 
 interface ExtractionResultsPanelProps {
   results: ExtractionResult[];

@@ -52,14 +52,20 @@ Docling chạy trong thread nên không thể hard-cancel an toàn. Với job đ
 | Module | Trách nhiệm |
 |---|---|
 | `backend/src/config.py` | token, origin, resource limits, data/model path |
-| `backend/src/main.py` | FastAPI boundary, validation, upload/job/history routes |
-| `backend/src/services/job_service.py` | queue, lifecycle, cancel, atomic output cleanup |
-| `backend/src/services/history_service.py` | locked atomic JSON persistence và eviction |
-| `backend/src/services/docling_service.py` | converter cache, execution lock, offline artifacts |
-| `backend/src/services/pdf_to_word_service.py` | render PDF tuần tự và tạo DOCX lossless theo từng section/trang |
-| `backend/src/services/markdown_cleaner.py` | table parser và content-preservation guard |
-| `frontend/src/services/api.ts` | authenticated create/poll/result/cancel client |
-| `frontend/src/App.tsx` | UI orchestration từ trạng thái job thật |
+| `backend/src/main.py` | composition root: lifespan, CORS, xác thực, include router theo từng sản phẩm |
+| `backend/src/uploads.py` | validate upload dùng chung (extension allowlist, size limit) |
+| `backend/src/services/mark_tini/router.py` | route Mark Tini: upload/job/history/export/citation/translation |
+| `backend/src/services/mark_tini/job_service.py` | queue, lifecycle, cancel, atomic output cleanup |
+| `backend/src/services/mark_tini/history_service.py` | locked atomic JSON persistence và eviction |
+| `backend/src/services/mark_tini/docling_service.py` | converter cache, execution lock, offline artifacts |
+| `backend/src/services/mark_tini/markdown_cleaner.py` | table parser và content-preservation guard |
+| `backend/src/services/tini_ocr/router.py` | route Tini OCR: upload/recognize/export |
+| `backend/src/services/tini_ocr/image_ocr_service.py` | pipeline tiền xử lý + nhận dạng chữ từ ảnh |
+| `backend/src/services/shared/resource_scheduler.py` | giới hạn một workload ML nặng chạy đồng thời, dùng chung hai sản phẩm |
+| `backend/src/services/shared/easyocr_reader.py` | EasyOCR reader dùng chung cho crop vùng (Mark Tini) và Tini OCR |
+| `frontend/src/shared/api.ts` | hạ tầng HTTP dùng chung: token, health check, error parsing |
+| `frontend/src/products/mark-tini/{MarkTiniApp.tsx,api.ts}` | UI orchestration và API client của Mark Tini |
+| `frontend/src/products/tini-ocr/{TiniOcrApp.tsx,api.ts}` | UI orchestration và API client của Tini OCR |
 | `frontend/electron/main.ts` | backend process, userData, offline env, navigation policy, hộp thoại lưu DOCX native |
 | `scripts/prepare-offline-bundle.ps1` | reproducible runtime/model preparation và smoke validation |
 

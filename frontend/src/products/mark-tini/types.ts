@@ -1,5 +1,5 @@
-export type ProcessingStage = 
-  | 'idle' 
+export type ProcessingStage =
+  | 'idle'
   | 'uploading'
   | 'queued'
   | 'converting'
@@ -27,12 +27,6 @@ export interface DocumentData {
   lastModified: Date;
 }
 
-export interface ToastMessage {
-  id: number;
-  type: 'success' | 'error' | 'info';
-  message: string;
-}
-
 // A single OCR'd region cropped from the source PDF, pending review. Text is
 // editable in the UI before the user searches the web or inserts it, since
 // raw OCR output often needs trimming to make a good search query.
@@ -42,7 +36,7 @@ export interface ExtractionResult {
 }
 
 // Mirrors CitationMatch.public_state() in
-// backend/src/services/citation_service.py.
+// backend/src/services/mark_tini/citation_service.py.
 export interface CitationMatch {
   title: string;
   authors: string[];
@@ -52,7 +46,7 @@ export interface CitationMatch {
 }
 
 // Mirrors CitationVerificationResult.public_state() in
-// backend/src/services/citation_service.py. `match` is null when OpenAlex has
+// backend/src/services/mark_tini/citation_service.py. `match` is null when OpenAlex has
 // no plausible hit; `llm_assessment` is an advisory-only plausibility read
 // from a local Ollama model, present only when `llm_available` is true.
 export interface CitationVerificationResult {
@@ -70,10 +64,11 @@ export interface CitationVerificationEntry extends CitationVerificationResult {
   id: string;
 }
 
-// Mirrors the response shape of POST /api/translate in backend/src/main.py.
-// direction/domain are typed loosely here (matching HistoryEntry.lang/table_mode
-// in services/api.ts) — the strict TranslationDirection/TranslationDomain
-// unions live there too, where the request is built and typo-safety matters.
+// Mirrors the response shape of POST /api/translate in
+// backend/src/services/mark_tini/router.py. direction/domain are typed loosely here
+// (matching HistoryEntry.lang/table_mode in api.ts) — the strict
+// TranslationDirection/TranslationDomain unions live there too, where the
+// request is built and typo-safety matters.
 export interface TranslationResult {
   original_text: string;
   translated_text: string;

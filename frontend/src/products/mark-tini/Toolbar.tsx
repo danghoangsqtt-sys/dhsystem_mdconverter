@@ -13,9 +13,9 @@ import {
   Upload
 } from 'lucide-react';
 import type { PreviewType } from '@uiw/react-md-editor';
-import type { TranslationDirection, TranslationDomain } from '../services/api';
-import { TRANSLATION_DIRECTION_OPTIONS, TRANSLATION_DOMAIN_OPTIONS } from '../services/api';
-import type { SourceFileMetadata } from '../types';
+import type { TranslationDirection, TranslationDomain } from './api';
+import { TRANSLATION_DIRECTION_OPTIONS, TRANSLATION_DOMAIN_OPTIONS } from './api';
+import type { SourceFileMetadata } from './types';
 
 type ToolbarActionState = 'disabled' | 'ready' | 'running';
 
@@ -177,8 +177,8 @@ const Toolbar: React.FC<ToolbarProps> = ({
         <button
           onClick={handleCopy}
           className={`flex flex-none items-center space-x-2 whitespace-nowrap px-3 py-1.5 rounded-md text-[13px] font-medium transition-colors border ${
-            copied 
-              ? 'bg-green-50 text-green-700 border-green-200 shadow-sm' 
+            copied
+              ? 'bg-green-50 text-green-700 border-green-200 shadow-sm'
               : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-200 shadow-sm'
           }`}
         >
@@ -197,7 +197,7 @@ const Toolbar: React.FC<ToolbarProps> = ({
           <span>{sourceFileMetadata ? 'Mở tài liệu gốc' : 'Chọn tài liệu gốc'}</span>
         </button>
 
-        <button 
+        <button
           onClick={onSave}
           className="flex flex-none items-center space-x-2 whitespace-nowrap bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-md text-[13px] font-medium transition-colors shadow-sm"
         >

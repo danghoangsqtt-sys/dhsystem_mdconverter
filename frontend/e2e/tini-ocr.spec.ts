@@ -2,10 +2,14 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { test, expect, _electron as electron, type ElectronApplication, type Page } from '@playwright/test';
+import { TEST_APP_DATA_DIR, TEST_ELECTRON_USER_DATA_DIR } from './testUserData';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MAIN_ENTRY = path.resolve(__dirname, '..', 'dist-electron', 'main.cjs');
 const SAMPLE_IMAGE = path.resolve(__dirname, 'fixtures', 'tini-ocr-sample.png');
+// Isolates electron.launch() below from the real, shared Tini Core profile
+// at %APPDATA%\Tini Suite - see testUserData.ts.
+const ISOLATION_ARGS = [`--user-data-dir=${TEST_ELECTRON_USER_DATA_DIR}`];
 const SAMPLE_IMAGE_NAME = 'tini-ocr-sample.png';
 // Ground truth for the fixture image, confirmed via a real (unmocked)
 // EasyOCR call against this exact file before it was checked in.
@@ -14,11 +18,16 @@ const REFERENCE_TEXT = 'Tài liệu tiếng Việt có dấu';
 // electron.launch() replaces the child's env entirely with whatever is
 // passed here (it does not merge with process.env) - see app.spec.ts for
 // why ELECTRON_RUN_AS_NODE must be stripped before launching.
-const electronEnv = Object.fromEntries(
-  Object.entries(process.env).filter(
-    ([key, value]) => key !== 'ELECTRON_RUN_AS_NODE' && value !== undefined
-  )
-) as Record<string, string>;
+const electronEnv = {
+  ...Object.fromEntries(
+    Object.entries(process.env).filter(
+      ([key, value]) => key !== 'ELECTRON_RUN_AS_NODE' && value !== undefined
+    )
+  ),
+  // Redirects TiniCoreSupervisor's data/session root away from the real
+  // profile - see testUserData.ts.
+  DOCUMARK_APP_DATA_DIR: TEST_APP_DATA_DIR,
+} as Record<string, string>;
 
 // Drives the real, built Electron app against the real shared Tini Core
 // backend and a real EasyOCR model - no mocking of recognition, export, or
@@ -28,7 +37,10 @@ test.describe.serial('Tini OCR image recognition', () => {
   let page: Page;
 
   test.beforeAll(async () => {
-    electronApp = await electron.launch({ args: [MAIN_ENTRY, '--product=tini-ocr'], env: electronEnv });
+    electronApp = await electron.launch({
+      args: [MAIN_ENTRY, '--product=tini-ocr', ...ISOLATION_ARGS],
+      env: electronEnv,
+    });
     page = await electronApp.firstWindow();
   });
 

@@ -1,5 +1,5 @@
 import { FileOutput, Loader2, RotateCcw, ScanText, ShieldCheck } from 'lucide-react';
-import type { OcrExportFormat } from '../../services/api';
+import type { OcrExportFormat } from './api';
 import type { Stage } from './TiniOcrApp';
 
 interface OcrToolbarProps {

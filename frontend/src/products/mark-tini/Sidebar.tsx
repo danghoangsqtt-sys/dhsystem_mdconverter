@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { Upload, HelpCircle, FilePlus, RefreshCcw, FolderOpen, Box, History, Trash2, Languages, Table2, ChevronLeft, ChevronRight, FileDown, Loader2, ScanText } from 'lucide-react';
-import type { OcrLang, TableMode, HistoryEntry } from '../services/api';
-import { OCR_LANG_OPTIONS, TABLE_MODE_OPTIONS } from '../services/api';
+import type { OcrLang, TableMode, HistoryEntry } from './api';
+import { OCR_LANG_OPTIONS, TABLE_MODE_OPTIONS } from './api';
 
 interface SidebarItemProps {
   icon: React.ElementType;
@@ -44,9 +44,7 @@ interface SidebarProps {
   onLoadHistoryItem: (jobId: string) => void;
   onDeleteHistoryItem: (jobId: string) => void;
   onExportEditableWord: () => void;
-  onExportFaithfulWord: () => void;
   editableWordState: ExportActionState;
-  faithfulWordState: ExportActionState;
 }
 
 const formatHistoryDate = (iso: string): string => {
@@ -84,9 +82,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   onLoadHistoryItem,
   onDeleteHistoryItem,
   onExportEditableWord,
-  onExportFaithfulWord,
   editableWordState,
-  faithfulWordState,
 }) => {
   const pdfInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
@@ -230,21 +226,11 @@ const Sidebar: React.FC<SidebarProps> = ({
                 type="button"
                 onClick={onExportEditableWord}
                 disabled={editableWordState !== 'ready'}
-                title="Xuất nội dung Docling đang mở thành đoạn văn, tiêu đề và bảng Word chỉnh sửa được"
+                title="Xuất nội dung Docling đang mở thành đoạn văn, tiêu đề, bảng và hình ảnh/sơ đồ Word chỉnh sửa được"
                 className="flex w-full items-center justify-center gap-2 rounded-md border border-blue-200 bg-blue-600 px-2 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-100 disabled:text-gray-400"
               >
                 {editableWordState === 'running' ? <Loader2 size={15} className="animate-spin" /> : <FileDown size={15} />}
-                <span>{editableWordState === 'running' ? 'Đang tạo DOCX...' : 'Xuất DOCX chỉnh sửa'}</span>
-              </button>
-              <button
-                type="button"
-                onClick={onExportFaithfulWord}
-                disabled={faithfulWordState !== 'ready'}
-                title="Tùy chọn lưu từng trang PDF dưới dạng ảnh để giữ bố cục tuyệt đối; chữ trong mode này không chỉnh sửa riêng được"
-                className="mt-1.5 flex w-full items-center justify-center gap-2 rounded-md border border-gray-200 bg-white px-2 py-1.5 text-[11px] font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {faithfulWordState === 'running' ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />}
-                <span>{faithfulWordState === 'running' ? 'Đang giữ bố cục...' : 'DOCX giống PDF (dạng ảnh)'}</span>
+                <span>{editableWordState === 'running' ? 'Đang tạo DOCX...' : 'Xuất Word'}</span>
               </button>
             </div>
 

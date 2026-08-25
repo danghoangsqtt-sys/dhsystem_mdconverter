@@ -1,34 +1,10 @@
 import axios from 'axios';
-import type { CitationVerificationResult, TranslationResult } from '../types';
+import type { CitationVerificationResult, TranslationResult } from './types';
+import { API_BASE_URL, authHeaders, ConversionCancelledError, getBlobErrorMessage, getErrorMessage, wait } from '../../shared/api';
 
-const API_BASE_URL = 'http://127.0.0.1:8088/api';
-const API_TOKEN_HEADER = 'X-DocuMark-Token';
 const POLL_INTERVAL_MS = 750;
 // Increased timeout for large PDFs (100+ pages with OCR/tables can take 5-10 minutes)
 const CONVERSION_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
-const PDF_TO_WORD_TIMEOUT_MS = 15 * 60 * 1000;
-
-let browserTokenPromise: Promise<string> | null = null;
-
-const getApiToken = async (): Promise<string> => {
-  const electronToken = window.documark?.apiToken;
-  if (electronToken) return electronToken;
-
-  if (!browserTokenPromise) {
-    browserTokenPromise = axios
-      .get<{ token: string }>(`${API_BASE_URL}/session`, { timeout: 5000 })
-      .then(response => response.data.token)
-      .catch(error => {
-        browserTokenPromise = null;
-        throw error;
-      });
-  }
-  return browserTokenPromise;
-};
-
-const authHeaders = async (): Promise<Record<string, string>> => ({
-  [API_TOKEN_HEADER]: await getApiToken(),
-});
 
 export interface ConversionResponse {
   success: boolean;
@@ -39,13 +15,6 @@ export interface ConversionResponse {
 
 export interface UploadProgressCallback {
   (progress: number): void;
-}
-
-export type BackendStartupStatus = 'starting' | 'loading_models' | 'ready' | 'error';
-
-export interface BackendHealth {
-  status: BackendStartupStatus;
-  detail: string;
 }
 
 export type OcrLang = 'vi_en' | 'vi' | 'en';
@@ -94,21 +63,6 @@ export interface ConversionJobState {
   error: string | null;
 }
 
-export class ConversionCancelledError extends Error {
-  constructor() {
-    super('Tác vụ chuyển đổi đã bị hủy.');
-    this.name = 'ConversionCancelledError';
-  }
-}
-
-export const checkBackendHealth = async (): Promise<BackendHealth> => {
-  const response = await axios.get<BackendHealth>(`${API_BASE_URL}/health`, {
-    headers: await authHeaders(),
-    timeout: 4000,
-  });
-  return response.data;
-};
-
 export interface UploadOptions {
   lang?: OcrLang;
   tableMode?: TableMode;
@@ -118,26 +72,6 @@ export interface UploadOptions {
   onJobStatus?: (job: ConversionJobState) => void;
   signal?: AbortSignal;
 }
-
-const getErrorMessage = (error: unknown, fallback: string): string => {
-  if (axios.isAxiosError(error) && error.response) {
-    const detail = error.response.data?.detail;
-    return typeof detail === 'string' ? detail : fallback;
-  }
-  return fallback;
-};
-
-const getBlobErrorMessage = async (error: unknown, fallback: string): Promise<string> => {
-  if (!axios.isAxiosError(error) || !error.response) return fallback;
-  const data = error.response.data;
-  if (!(data instanceof Blob)) return getErrorMessage(error, fallback);
-  try {
-    const parsed = JSON.parse(await data.text());
-    return typeof parsed?.detail === 'string' ? parsed.detail : fallback;
-  } catch {
-    return fallback;
-  }
-};
 
 export const createConversionJob = async (
   file: File,
@@ -193,9 +127,6 @@ export const cancelConversionJob = async (jobId: string): Promise<ConversionJobS
   });
   return response.data;
 };
-
-const wait = (milliseconds: number): Promise<void> =>
-  new Promise(resolve => window.setTimeout(resolve, milliseconds));
 
 export const uploadAndConvertFile = async (
   file: File,
@@ -283,177 +214,6 @@ export const exportMarkdownToWord = async (
       await getBlobErrorMessage(error, 'Không thể tạo DOCX chỉnh sửa được từ nội dung Docling.'),
       { cause: error },
     );
-  }
-};
-
-export const exportPdfToFaithfulWord = async (
-  file: File,
-  onUploadProgress?: UploadProgressCallback,
-): Promise<Blob> => {
-  const formData = new FormData();
-  formData.append('file', file);
-  try {
-    const response = await axios.post<Blob>(`${API_BASE_URL}/export/pdf-to-word-faithful`, formData, {
-      headers: {
-        ...(await authHeaders()),
-        'Content-Type': 'multipart/form-data',
-      },
-      responseType: 'blob',
-      timeout: PDF_TO_WORD_TIMEOUT_MS,
-      onUploadProgress: event => {
-        if (onUploadProgress && event.total) {
-          onUploadProgress(Math.round((event.loaded * 100) / event.total));
-        }
-      },
-    });
-    return response.data;
-  } catch (error) {
-    throw new Error(
-      await getBlobErrorMessage(error, 'Không thể tạo file Word giữ nguyên bố cục PDF.'),
-      { cause: error },
-    );
-  }
-};
-
-export type ImageOcrPreset = 'original' | 'balanced' | 'high_contrast';
-export type ImageOcrEngine = 'easyocr';
-export type OcrExportFormat = 'txt' | 'markdown' | 'docx-editable' | 'docx-faithful';
-
-export interface ImageOcrLine {
-  text: string;
-  confidence: number;
-  box: number[][];
-}
-
-export interface ImageOcrPage {
-  index: number;
-  filename: string;
-  width: number;
-  height: number;
-  engine: ImageOcrEngine;
-  recipe: string[];
-  confidence: number;
-  lines: ImageOcrLine[];
-  text: string;
-  error: string | null;
-}
-
-export interface ImageOcrJobState {
-  job_id: string;
-  status: 'queued' | 'recognizing' | 'cancelling' | 'cancelled' | 'complete' | 'error';
-  progress: number;
-  message: string;
-  page_count: number;
-  completed_pages: number;
-  created_at: string;
-  updated_at: string;
-  error: string | null;
-}
-
-export interface ImageOcrResult {
-  job_id: string;
-  engine: ImageOcrEngine;
-  preset: ImageOcrPreset;
-  pages: ImageOcrPage[];
-}
-
-export const createImageOcrJob = async (
-  files: File[],
-  preset: ImageOcrPreset,
-  engine: ImageOcrEngine,
-  signal?: AbortSignal,
-): Promise<ImageOcrJobState> => {
-  const formData = new FormData();
-  files.forEach(file => formData.append('files', file));
-  formData.append('preset', preset);
-  formData.append('engine', engine);
-  try {
-    const response = await axios.post<ImageOcrJobState>(`${API_BASE_URL}/ocr/jobs`, formData, {
-      headers: { ...(await authHeaders()), 'Content-Type': 'multipart/form-data' },
-      timeout: CONVERSION_TIMEOUT_MS,
-      signal,
-    });
-    return response.data;
-  } catch (error) {
-    throw new Error(getErrorMessage(error, 'Không thể tạo tác vụ OCR.'), { cause: error });
-  }
-};
-
-export const fetchImageOcrJob = async (jobId: string): Promise<ImageOcrJobState> => {
-  const response = await axios.get<ImageOcrJobState>(`${API_BASE_URL}/ocr/jobs/${jobId}`, {
-    headers: await authHeaders(),
-    timeout: 30_000,
-  });
-  return response.data;
-};
-
-export const fetchImageOcrResult = async (jobId: string): Promise<ImageOcrResult> => {
-  const response = await axios.get<ImageOcrResult>(`${API_BASE_URL}/ocr/jobs/${jobId}/result`, {
-    headers: await authHeaders(),
-    timeout: 30_000,
-  });
-  return response.data;
-};
-
-export const cancelImageOcrJob = async (jobId: string): Promise<ImageOcrJobState> => {
-  const response = await axios.delete<ImageOcrJobState>(`${API_BASE_URL}/ocr/jobs/${jobId}`, {
-    headers: await authHeaders(),
-    timeout: 10_000,
-  });
-  return response.data;
-};
-
-export const recognizeImages = async (
-  files: File[],
-  options: {
-    preset?: ImageOcrPreset;
-    engine?: ImageOcrEngine;
-    signal?: AbortSignal;
-    onJobStatus?: (job: ImageOcrJobState) => void;
-  } = {},
-): Promise<ImageOcrResult> => {
-  const created = await createImageOcrJob(
-    files,
-    options.preset ?? 'balanced',
-    options.engine ?? 'easyocr',
-    options.signal,
-  );
-  options.onJobStatus?.(created);
-  const cancelOnAbort = () => { void cancelImageOcrJob(created.job_id); };
-  options.signal?.addEventListener('abort', cancelOnAbort, { once: true });
-  try {
-    while (true) {
-      if (options.signal?.aborted) throw new ConversionCancelledError();
-      await wait(POLL_INTERVAL_MS);
-      const job = await fetchImageOcrJob(created.job_id);
-      options.onJobStatus?.(job);
-      if (job.status === 'complete') return await fetchImageOcrResult(job.job_id);
-      if (job.status === 'cancelled') throw new ConversionCancelledError();
-      if (job.status === 'error') throw new Error(job.error || 'Nhận dạng ảnh thất bại.');
-    }
-  } finally {
-    options.signal?.removeEventListener('abort', cancelOnAbort);
-  }
-};
-
-export const exportImageOcr = async (
-  files: File[],
-  pages: Pick<ImageOcrPage, 'filename' | 'text'>[],
-  exportFormat: OcrExportFormat,
-): Promise<Blob> => {
-  const formData = new FormData();
-  formData.append('reviewed_pages', JSON.stringify(pages));
-  formData.append('export_format', exportFormat);
-  files.forEach(file => formData.append('files', file));
-  try {
-    const response = await axios.post<Blob>(`${API_BASE_URL}/ocr/export`, formData, {
-      headers: { ...(await authHeaders()), 'Content-Type': 'multipart/form-data' },
-      responseType: 'blob',
-      timeout: CONVERSION_TIMEOUT_MS,
-    });
-    return response.data;
-  } catch (error) {
-    throw new Error(await getBlobErrorMessage(error, 'Không thể xuất kết quả OCR.'), { cause: error });
   }
 };
 

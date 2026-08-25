@@ -1,7 +1,7 @@
 # Báo cáo kỹ thuật — Tini Suite v1.6.0
 
 Ngày lập báo cáo: 24/08/2026
-Phiên bản: 1.6.0 (rebrand Tini Suite — một bộ cài tạo hai ứng dụng Mark Tini và Tini OCR dùng chung Tini Core; thêm xuất Word 2 chế độ, Tini OCR nhận dạng ảnh thật, chọn cả thư mục, cùng các bản vá 1.3.1–1.5.0 về PDF dài, lịch sử tài liệu gốc, và hạ tầng E2E)
+Phiên bản: 1.6.0 (rebrand Tini Suite — một bộ cài tạo hai ứng dụng Mark Tini và Tini OCR dùng chung Tini Core; thêm xuất Word chỉnh sửa được với ảnh/sơ đồ nhúng thật, Tini OCR nhận dạng ảnh thật, chọn cả thư mục, cùng các bản vá 1.3.1–1.5.0 về PDF dài, lịch sử tài liệu gốc, và hạ tầng E2E)
 
 ---
 
@@ -65,7 +65,6 @@ flowchart LR
     Q2 --> SCHED
     SCHED --> DOC[Docling]
     SCHED --> OCR[EasyOCR dùng chung]
-    SCHED --> WORD[pdf_to_word_service]
     API --> TR[Model dịch máy envit5-translation]
     API --> CIT[OpenAlex API + Ollama cục bộ tùy chọn]
     API --> FS[(Thư mục dữ liệu dùng chung AppData Tini Suite)]
@@ -403,33 +402,31 @@ flowchart TD
 - **EasyOCR dùng chung:** cùng một instance reader phục vụ cả Region OCR (Mark Tini, mục 3.4) và Tini OCR, tránh nạp trùng model 2 lần khi cả hai sản phẩm cùng mở.
 - **Engine mở rộng được:** hiện chỉ có `easyocr` (`SUPPORTED_IMAGE_OCR_ENGINES = {"easyocr"}`) nhưng tham số `engine` đã có sẵn trong API để bổ sung engine khác về sau mà không phải đổi contract.
 
-### 3.11. Xuất Word: chỉnh sửa được vs giống PDF *(mới)*
+### 3.11. Xuất Word chỉnh sửa được — nhúng ảnh/sơ đồ thật *(cập nhật)*
 
-Tini Suite có **hai đường xuất DOCX khác triết lý**, phục vụ hai nhu cầu khác nhau:
+Trước bản cập nhật này, Tini Suite có **hai đường xuất DOCX khác triết lý**. Đường "DOCX giống PDF" (render từng trang PDF thành ảnh lossless qua `pdf_to_word_service.py`, không sửa chữ được) đã bị **gỡ bỏ hoàn toàn** — không còn cần thiết sau khi đường chỉnh sửa được nâng cấp để hỗ trợ đầy đủ ảnh/sơ đồ thật. Chỉ còn lại **một đường xuất Word duy nhất**:
 
 ```mermaid
 flowchart TD
-    A[Người dùng đã có Markdown đã review trong Mark Tini] --> B[Bấm Xuất Word chỉnh sửa được]
+    A[Người dùng đã có Markdown đã review trong Mark Tini] --> B[Bấm Xuất Word]
     B --> C[POST /api/export/markdown-to-word - markdown, original_filename]
     C --> D{Nội dung rỗng hoặc vượt 10 triệu ký tự}
     D -- có --> D1[Từ chối 400/413]
     D -- không --> E[markdown_to_word_service - parse Markdown bằng markdown_it]
-    E --> F[Dựng heading, đoạn văn, danh sách, bảng bằng đối tượng Word native qua python-docx]
-    F --> G[Trả file .docx tải về, xoá file tạm ngay sau khi gửi xong]
-
-    H[Người dùng có PDF gốc, cần giữ bố cục tuyệt đối] --> I[Bấm Xuất Word giống PDF]
-    I --> J[POST /api/export/pdf-to-word-faithful - file PDF]
-    J --> K[Kiểm tra đúng phần mở rộng .pdf và nội dung thực]
-    K --> L[heavy_job_slot khoá lượt - pdf_to_word_service]
-    L --> M[pypdfium2 render từng trang PDF thành ảnh lossless]
-    M --> N[Chèn mỗi ảnh vào một section Word riêng - tự đặt hướng trang theo khổ gốc]
-    N --> O[Trả file .docx kèm header X-DocuMark-Page-Count, xoá file tạm sau khi gửi]
+    E --> F{Đoạn văn chỉ gồm duy nhất 1 ảnh - đúng cách Docling luôn phát sinh ảnh}
+    F -- có --> F1{Giải mã được base64 nhúng sẵn trong Markdown}
+    F1 -- có --> F2[Chèn ảnh Word thật - căn giữa, tự co theo chiều rộng khung nội dung trang]
+    F1 -- không hoặc dữ liệu hỏng --> F3[Rơi về đoạn chữ in nghiêng - Hình ảnh, không làm hỏng cả lượt xuất]
+    F -- không --> G[Dựng heading, đoạn văn, danh sách, bảng bằng đối tượng Word native qua python-docx]
+    F2 --> G
+    F3 --> G
+    G --> H[Trả file .docx tải về, xoá file tạm ngay sau khi gửi xong]
 ```
 
-- **DOCX chỉnh sửa được** (`markdown_to_word_service.py`, `python-docx` + `markdown_it`): dùng chính Markdown mà Docling đã trích xuất và người dùng đã sửa trong editor — không chạy lại pipeline ML, nên nhanh và giữ đúng nội dung đã review. Giới hạn 10.000.000 ký tự (`MAX_EDITABLE_DOCX_CHARACTERS`) để tránh sinh file quá lớn.
-- **DOCX giống PDF** (`pdf_to_word_service.py`, `pypdfium2` + `python-docx`): render từng trang PDF thành ảnh, mỗi trang là một Word section riêng để giữ đúng hướng/khổ giấy khi tài liệu trộn trang dọc/ngang — đổi lại, nội dung trong Word là ảnh, không sửa chữ trực tiếp được. Phù hợp khi bố cục (công thức phức tạp, sơ đồ, hình ảnh) quan trọng hơn khả năng chỉnh sửa.
-- Cả hai đường xuất, cùng với Tini OCR và Docling, đều đi qua `heavy_job_slot()` nên không có chuyện hai export nặng chạy song song làm tràn RAM.
-- Tini OCR có đường xuất DOCX riêng (`ocr_export_service.py`, xem `/api/ocr/export` ở mục 5.2) — không dùng chung hai service này vì đầu vào là ảnh + text đã review theo từng trang, không phải Markdown hay PDF.
+- **Nguồn ảnh:** ảnh/sơ đồ khối không được xử lý lại ở bước xuất Word — Docling giữ lại bitmap của từng picture/diagram ngay tại bước convert PDF gốc (`generate_picture_images`, `images_scale = 2.0` — mục 3.2) và nhúng thẳng dưới dạng `data:image/...;base64,...` khi xuất Markdown (`image_mode=ImageRefMode.EMBEDDED`), thay cho comment placeholder `<!-- image -->` như trước. `markdown_to_word_service.py` chỉ đọc lại đúng dữ liệu đã có sẵn trong chuỗi Markdown, không chạy lại pipeline ML — giữ đúng nguyên tắc "không chạy pass ML thứ hai" đã áp dụng từ đầu.
+- **DOCX chỉnh sửa được** (`markdown_to_word_service.py`, `python-docx` + `markdown_it`): dùng chính Markdown mà Docling đã trích xuất và người dùng đã sửa trong editor — không chạy lại pipeline ML, nên nhanh và giữ đúng nội dung đã review. Giới hạn 10.000.000 ký tự (`MAX_EDITABLE_DOCX_CHARACTERS`) để tránh sinh file quá lớn; nhúng ảnh base64 làm tăng dung lượng chuỗi Markdown (~33% dung lượng ảnh gốc) nên tài liệu nhiều ảnh chạm ngưỡng này sớm hơn.
+- **Giới hạn có chủ đích:** Markdown thuần không có cú pháp căn lề đoạn văn, nên độ trung thực căn giữa/căn lề của **văn bản** so với tài liệu gốc không thể khôi phục qua trung gian Markdown — chỉ **ảnh/sơ đồ** được đảm bảo căn giữa (quy ước chuẩn cho hình trong Word), không áp dụng cho đoạn văn bản thường (xem thêm mục 11).
+- Tini OCR có đường xuất DOCX riêng (`ocr_export_service.py`, xem `/api/ocr/export` ở mục 5.2) — không dùng chung service này vì đầu vào là ảnh + text đã review theo từng trang, không phải Markdown.
 
 ### 3.12. Chọn cả thư mục & xử lý theo lô *(mới)*
 
@@ -466,10 +463,10 @@ Chọn cả thư mục ở Mark Tini không tạo một "siêu job" duy nhất �
 
 Chọn một vùng bất kỳ trên trang PDF để OCR riêng vùng đó. Kết quả hiện ở panel riêng có thể sửa văn bản, tìm kiếm trên web, hoặc chèn thẳng vào tài liệu Markdown đang soạn (mục 3.4); bảng kết quả kéo giãn chiều cao tự do.
 
-### 4.3. Xuất Word — hai chế độ *(mới)*
+### 4.3. Xuất Word chỉnh sửa được *(cập nhật)*
 
-- **DOCX chỉnh sửa được**: xuất trực tiếp từ Markdown đã review trong Mark Tini thành heading/đoạn/danh sách/bảng Word thật, sửa chữ được ngay trong Word.
-- **DOCX giống PDF**: xuất toàn bộ PDF gốc sang Word bằng ảnh lossless từng trang, giữ chính xác công thức/sơ đồ/hình ảnh và hướng trang gốc — đánh đổi khả năng sửa chữ để lấy độ trung thực bố cục tuyệt đối.
+- Xuất trực tiếp từ Markdown đã review trong Mark Tini thành heading/đoạn/danh sách/bảng Word thật, sửa chữ được ngay trong Word.
+- Ảnh/sơ đồ khối trong tài liệu gốc được tách và nhúng lại thành ảnh Word thật — căn giữa, tự co theo chiều rộng trang — thay vì hiện dưới dạng placeholder văn bản.
 - Hộp thoại Lưu thành cho phép chọn thẳng thư mục đích (kể cả USB) thay vì luôn tải vào thư mục Downloads mặc định.
 - Chi tiết thuật toán và giới hạn: mục 3.11.
 
@@ -529,8 +526,7 @@ Không phải một tính năng người dùng thấy trực tiếp, nhưng là 
 | `image_ocr_service.py` | Gọi EasyOCR nhận dạng ảnh đã tiền xử lý, ghép kết quả theo trang | Có |
 | `ocr_job_service.py` | Hàng đợi Tini OCR (ThreadPoolExecutor, trần 20 job hoạt động) | Có (mã nguồn nội bộ) |
 | `ocr_export_service.py` | Xuất kết quả Tini OCR: TXT/Markdown/DOCX chỉnh sửa/DOCX giống ảnh | Có |
-| `markdown_to_word_service.py` | Xuất Markdown đã review thành DOCX chỉnh sửa được | Có |
-| `pdf_to_word_service.py` | Xuất PDF gốc thành DOCX giống PDF (raster từng trang) | Có |
+| `markdown_to_word_service.py` | Xuất Markdown đã review thành DOCX chỉnh sửa được, gồm nhúng ảnh/sơ đồ thật | Có |
 | `resource_scheduler.py` | `heavy_job_slot()` — ép mọi tác vụ ML nặng về concurrency 1 toàn tiến trình | Có |
 | Hàng đợi Mark Tini (`job_service.py`, `ConversionJobManager`) | Điều phối job chuyển đổi tuần tự, trong tiến trình | Có |
 | `history_service.py` | Lưu/đọc lịch sử dạng file JSON, ghi nguyên tử, khóa luồng | Có |
@@ -543,7 +539,7 @@ Toàn bộ backend vẫn chạy trong **một tiến trình Python duy nhất**,
 
 ### 5.2. Danh sách API endpoint
 
-Tiền tố chung: `http://127.0.0.1:8088`. Trừ `GET /` và `GET /api/session`, mọi endpoint dưới `/api/*` đều yêu cầu header `X-DocuMark-Token` hợp lệ (đã xác minh trực tiếp từng decorator route trong `main.py` — tổng cộng **22 route**, tăng từ 12 route ở v1.3.0).
+Tiền tố chung: `http://127.0.0.1:8088`. Trừ `GET /` và `GET /api/session`, mọi endpoint dưới `/api/*` đều yêu cầu header `X-DocuMark-Token` hợp lệ (đã xác minh trực tiếp từng decorator route trong `main.py` — tổng cộng **21 route**, tăng từ 12 route ở v1.3.0; giảm từ 22 sau khi gỡ route `/api/export/pdf-to-word-faithful`).
 
 | Phương thức | Đường dẫn | Xác thực | Chức năng |
 |---|---|---|---|
@@ -556,8 +552,7 @@ Tiền tố chung: `http://127.0.0.1:8088`. Trừ `GET /` và `GET /api/session`
 | DELETE | `/api/jobs/{job_id}` | Có | Yêu cầu hủy job |
 | POST | `/api/convert` | Có | Endpoint tương thích cũ — chờ tới khi job xong rồi trả kết quả trực tiếp |
 | GET | `/api/download/{job_id}` | Có | Tải file `.md` kết quả, đặt lại tên theo tên file gốc |
-| POST | `/api/export/markdown-to-word` | Có | *(mới)* Xuất Markdown đã review thành DOCX chỉnh sửa được |
-| POST | `/api/export/pdf-to-word-faithful` | Có | *(mới)* Xuất PDF gốc thành DOCX giống PDF (raster từng trang) |
+| POST | `/api/export/markdown-to-word` | Có | Xuất Markdown đã review thành DOCX chỉnh sửa được, gồm nhúng ảnh/sơ đồ thật |
 | POST | `/api/ocr/jobs` | Có | *(mới)* Tạo job Tini OCR — tối đa 50 ảnh/lượt, preset + engine, 503 nếu đầy trần |
 | GET | `/api/ocr/jobs/{job_id}` | Có | *(mới)* Trạng thái job Tini OCR |
 | GET | `/api/ocr/jobs/{job_id}/result` | Có | *(mới)* Kết quả OCR theo từng trang khi job `complete` |
@@ -591,7 +586,7 @@ Tiền tố chung: `http://127.0.0.1:8088`. Trừ `GET /` và `GET /api/session`
 
 ## 6. Model AI đang sử dụng
 
-Tất cả chạy **cục bộ, trên CPU** (không cần GPU/CUDA). Không có model AI mới nào được thêm từ v1.3.0 — Tini OCR và hai chế độ xuất Word đều tái sử dụng model đã có sẵn (EasyOCR, Docling) thay vì nạp thêm.
+Tất cả chạy **cục bộ, trên CPU** (không cần GPU/CUDA). Không có model AI mới nào được thêm từ v1.3.0 — Tini OCR và xuất Word đều tái sử dụng model đã có sẵn (EasyOCR, Docling) thay vì nạp thêm.
 
 | Model | Vai trò | Nguồn |
 |---|---|---|
@@ -706,7 +701,7 @@ Dùng 1 file PDF và 1 file DOCX thật của khách hàng (ưu tiên loại có
 - Convert PDF/DOCX, xác nhận Markdown giữ đúng bảng, chữ đậm, công thức.
 - Thử **"Chọn cả thư mục"** với một thư mục chứa vài file hỗn hợp định dạng.
 - Thử hủy 1 job đang chạy — job dừng ngay trong UI.
-- Thử cả hai chế độ xuất Word (chỉnh sửa được / giống PDF), mở file `.docx` kết quả kiểm tra bằng Word/LibreOffice.
+- Thử xuất Word với tài liệu có ảnh/sơ đồ khối, mở file `.docx` kết quả bằng Word/LibreOffice kiểm tra ảnh hiện thật (không phải placeholder), căn giữa và không tràn trang.
 - Ghi lại thời gian xử lý thực tế trên phần cứng khách hàng.
 
 ### Bước 5 — Test Tini OCR (vẫn đang tắt mạng)
@@ -739,7 +734,7 @@ Hướng dẫn sử dụng đầy đủ dành cho người dùng cuối được
 
 1. **Chuyển đổi tài liệu (Mark Tini):** Sidebar → *Thêm file* hoặc *Chọn cả thư mục* → chọn file/thư mục → chờ xử lý → nội dung Markdown hiện trong khung soạn thảo.
 2. **Chọn ngôn ngữ OCR / chế độ bảng:** 2 ô chọn ngay dưới nút tải file trong Sidebar.
-3. **Xuất Word:** nút *Xuất Word chỉnh sửa được* hoặc *Xuất Word giống PDF* trên thanh công cụ, tùy nhu cầu sửa chữ hay giữ nguyên bố cục.
+3. **Xuất Word:** nút *Xuất Word* trên thanh công cụ — dựng heading/đoạn/bảng Word thật, ảnh/sơ đồ khối được nhúng thật kèm theo.
 4. **Trích xuất vùng PDF:** khi mở file PDF, vẽ khung chọn vùng cần OCR riêng trên khung xem PDF bên trái.
 5. **Xác minh trích dẫn:** bôi đen đoạn văn bản → nút *Xác minh trích dẫn* (cần mạng).
 6. **Dịch đoạn văn bản:** bôi đen đoạn → chọn chiều dịch/lĩnh vực thuật ngữ → nút *Dịch đoạn đã chọn* (không cần mạng).
@@ -752,11 +747,11 @@ Hướng dẫn sử dụng đầy đủ dành cho người dùng cuối được
 ## 11. Trạng thái hiện tại & giới hạn đã biết
 
 **Đã hoàn thành (verify được qua mã nguồn/test hiện tại):**
-- **117/117 unit test backend pass** (đã chạy lại trong phiên làm việc dẫn tới báo cáo này, 15 file test — tăng từ 48 test/module ở v1.3.0), gồm test mới cho `ocr_job_service` (8 test, thêm trần đồng thời `OcrJobCapacityError`/HTTP 503 và cơ chế trim bản ghi cũ), cùng test có sẵn cho `markdown_to_word_service`, `pdf_to_word_service`, `ocr_export_service`, `resource_scheduler`, `image_ocr_service`.
-- 12 kịch bản E2E (Playwright, 2 file spec) theo CHANGELOG v1.6.0 — chưa chạy lại trong phiên làm việc dẫn tới báo cáo này; xem CHANGELOG.md để biết lần chạy gần nhất.
+- **113/113 unit test backend pass** (đã chạy lại trong phiên làm việc dẫn tới báo cáo này, 14 file test), gồm test mới cho `ocr_job_service` (8 test, thêm trần đồng thời `OcrJobCapacityError`/HTTP 503 và cơ chế trim bản ghi cũ) và test mới cho `markdown_to_word_service`/`docling_service` xác nhận ảnh/sơ đồ được nhúng thật bằng một lượt convert Docling thật không mock (không chỉ test giả lập call shape), cùng test có sẵn cho `ocr_export_service`, `resource_scheduler`, `image_ocr_service`. File `pdf_to_word_service.py` và test riêng của nó đã bị xoá cùng đợt gỡ DOCX "giống PDF" (mục 3.11).
+- 11 kịch bản E2E (Playwright, 2 file spec — giảm từ 12 sau khi bỏ kịch bản xuất DOCX giống PDF) — chưa chạy lại trong phiên làm việc dẫn tới báo cáo này; xem CHANGELOG.md để biết lần chạy gần nhất.
 - Rebrand Tini Suite hoàn tất: một bộ cài NSIS tạo hai shortcut Mark Tini/Tini OCR, dùng chung Tini Core (mục 3.7) — đã verify cơ chế attach/khởi động lại qua đọc trực tiếp `coreSupervisor.ts`.
 - Tini OCR: pipeline tiền xử lý 3 preset + EasyOCR dùng chung, hàng đợi có trần đồng thời, 4 định dạng xuất — đã verify qua mã nguồn và test.
-- Xuất Word 2 chế độ (chỉnh sửa được / giống PDF) — đã verify qua mã nguồn và test.
+- Xuất Word chỉnh sửa được, gồm nhúng ảnh/sơ đồ khối thật (căn giữa, tự co theo trang) — đã verify qua mã nguồn, test service và một lượt convert Docling thật (mục 3.11).
 - Đã sửa lỗi PDF 128+ trang bị lưu thiếu do `std::bad_alloc` (chia cụm trang, tự cứu trang lỗi).
 - Lịch sử giữ được file gốc đã upload, có thể tải lại qua `/api/history/{job_id}/original`.
 - Các hạng mục kế thừa từ v1.3.0 (hàng đợi Mark Tini, Docling pipeline, markdown cleaner, Region OCR, dịch, xác minh trích dẫn, autosave, sidebar) không có thay đổi hành vi, vẫn đúng như đã verify trước đây.
@@ -771,5 +766,5 @@ Hướng dẫn sử dụng đầy đủ dành cho người dùng cuối được
 - Dịch chỉ theo đoạn được chọn, không dịch nguyên văn bản tài liệu trong 1 lần bấm.
 - Xác minh trích dẫn là gợi ý tham khảo, không phải xác nhận tuyệt đối.
 - Ollama không được đóng gói cùng ứng dụng.
-- DOCX "giống PDF" xuất nội dung dưới dạng ảnh — không sửa chữ trực tiếp được trong Word, đây là đánh đổi có chủ đích để giữ bố cục tuyệt đối (mục 3.11).
+- Xuất Word chỉnh sửa được đi qua trung gian Markdown, vốn không có cú pháp căn lề đoạn văn — nên căn giữa/căn lề của **văn bản** so với tài liệu gốc không được khôi phục; chỉ **ảnh/sơ đồ** được đảm bảo căn giữa (mục 3.11).
 - Tini OCR hiện chỉ nhận JPG/PNG, chỉ có engine `easyocr` — tham số `engine` đã chừa sẵn chỗ mở rộng nhưng chưa có engine thứ hai.

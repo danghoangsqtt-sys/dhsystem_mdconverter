@@ -50,8 +50,7 @@ Từ phiên bản **v1.2.0** trở lên, Mark Tini sử dụng:
 | Tính năng | Mô tả |
 |-----------|--------|
 | 📄 **Chuyển đổi đa định dạng** | PDF, DOCX, PPTX, HTML, ảnh (PNG, JPEG, TIFF, BMP) |
-| 📝 **DOCX chỉnh sửa được** | PDF qua Docling rồi xuất heading, đoạn, danh sách và bảng Word native; dùng chính nội dung người dùng đã review |
-| 🧾 **DOCX giống PDF (dạng ảnh)** | Tùy chọn giữ từng trang PDF dưới dạng ảnh lossless khi bố cục tuyệt đối quan trọng hơn khả năng sửa chữ |
+| 📝 **DOCX chỉnh sửa được** | PDF qua Docling rồi xuất heading, đoạn, danh sách, bảng và hình ảnh/sơ đồ Word native (ảnh nhúng thật, tự co theo trang, căn giữa); dùng chính nội dung người dùng đã review |
 | 📷 **Tini OCR riêng** | OCR nhiều ảnh Việt–Anh, review theo trang và xuất TXT/Markdown/hai mode DOCX |
 | 🗣️ **OCR Việt/Anh** | Lựa chọn ngôn ngữ: `vi+en`, `vi`, hoặc `en` tùy theo tài liệu |
 | 📊 **Nhận dạng bảng thông minh** | Hai chế độ: `Accurate` (chính xác) hoặc `Fast` (nhanh) |
@@ -271,7 +270,7 @@ docling-env\Scripts\python.exe -m unittest discover -s backend\tests -v
 - Job queue (Mark Tini), cancel semantics, capacity limits
 - Storage atomicity, cleanup orphaned outputs/uploads, startup cleanup
 - Docling: chunked large-PDF conversion, markdown table correctness
-- Word export: DOCX chỉnh sửa (markdown → docx) và DOCX giống PDF (raster-faithful)
+- Word export: DOCX chỉnh sửa (markdown → docx), gồm nhúng ảnh/sơ đồ thật
 - Tini OCR: nhận dạng ảnh (EasyOCR), export kết quả OCR
 - Dịch EN↔VI, xác minh trích dẫn (citation), resource scheduler
 
@@ -306,9 +305,7 @@ Kiểm tra:
 **Cải tiến chính:**
 - ✅ Một setup offline tạo hai ứng dụng riêng Mark Tini và Tini OCR, dùng chung Tini Core/runtime/model
 - ✅ OCR ảnh Việt–Anh thực tế, review và xuất TXT/Markdown/DOCX
-- ✅ PDF → Docling → DOCX editable với chữ/bảng biên soạn được ngay dưới nút Thêm file
-- ✅ Giữ tùy chọn DOCX giống PDF dạng ảnh với nhãn phân biệt rõ
-- ✅ Xuất toàn bộ PDF sang Word bằng ảnh lossless, giữ nguyên công thức, sơ đồ, hình ảnh và từng hướng/khổ trang
+- ✅ PDF → Docling → DOCX editable với chữ/bảng biên soạn được, ảnh/sơ đồ khối được tách và nhúng thật (căn giữa, tự co theo trang) ngay dưới nút Thêm file
 - ✅ Hộp thoại Lưu thành cho phép chọn trực tiếp USB; có thể xuất lại PDF gốc từ lịch sử
 - ✅ Toolbar/Sidebar responsive, không chồng lấn khi thu nhỏ cửa sổ
 - ✅ Nút chọn hoặc mở tài liệu gốc luôn hiển thị

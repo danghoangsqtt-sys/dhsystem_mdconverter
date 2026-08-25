@@ -3,11 +3,15 @@ import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { test, expect, _electron as electron, type ElectronApplication, type Page } from '@playwright/test';
+import { TEST_APP_DATA_DIR, TEST_CORE_DESCRIPTOR, TEST_ELECTRON_USER_DATA_DIR } from './testUserData';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MAIN_ENTRY = path.resolve(__dirname, '..', 'dist-electron', 'main.cjs');
 const SAMPLE_PDF = path.resolve(__dirname, 'fixtures', 'sample.pdf');
-const CORE_DESCRIPTOR = path.join(process.env.APPDATA ?? '', 'Tini Suite', 'core', 'session.json');
+const CORE_DESCRIPTOR = TEST_CORE_DESCRIPTOR;
+// Isolates every electron.launch() below from the real, shared Tini Core
+// profile at %APPDATA%\Tini Suite - see testUserData.ts.
+const ISOLATION_ARGS = [`--user-data-dir=${TEST_ELECTRON_USER_DATA_DIR}`];
 
 type CoreDescriptor = {
   instanceId: string;
@@ -33,11 +37,16 @@ function processIsAlive(pid: number) {
 // and fails immediately on Chromium-only switches like
 // --remote-debugging-port with a "bad option" error. Strip it so the test
 // launches the real app regardless of the parent shell's quirks.
-const electronEnv = Object.fromEntries(
-  Object.entries(process.env).filter(
-    ([key, value]) => key !== 'ELECTRON_RUN_AS_NODE' && value !== undefined
-  )
-) as Record<string, string>;
+const electronEnv = {
+  ...Object.fromEntries(
+    Object.entries(process.env).filter(
+      ([key, value]) => key !== 'ELECTRON_RUN_AS_NODE' && value !== undefined
+    )
+  ),
+  // Redirects TiniCoreSupervisor's data/session root away from the real
+  // profile - see testUserData.ts.
+  DOCUMARK_APP_DATA_DIR: TEST_APP_DATA_DIR,
+} as Record<string, string>;
 
 // Drives the real, built Electron app (main + preload + renderer), which in
 // turn attaches to the real shared Tini Core backend - this is the same code
@@ -50,7 +59,10 @@ test.describe.serial('Mark Tini desktop app', () => {
   let convertedFileName: string;
 
   test.beforeAll(async () => {
-    electronApp = await electron.launch({ args: [MAIN_ENTRY, '--product=mark-tini'], env: electronEnv });
+    electronApp = await electron.launch({
+      args: [MAIN_ENTRY, '--product=mark-tini', ...ISOLATION_ARGS],
+      env: electronEnv,
+    });
     page = await electronApp.firstWindow();
   });
 
@@ -154,7 +166,7 @@ test.describe.serial('Mark Tini desktop app', () => {
 
   test('exports Docling content as an editable Word document from the sidebar', async ({ browserName }, testInfo) => {
     expect(browserName).toBe('chromium');
-    const exportButton = page.getByRole('button', { name: 'Xuất DOCX chỉnh sửa', exact: true });
+    const exportButton = page.getByRole('button', { name: 'Xuất Word', exact: true });
     await expect(exportButton).toBeEnabled({ timeout: 30_000 });
 
     const exportedPath = testInfo.outputPath(convertedFileName.replace(/\.pdf$/i, '-chinh-sua.docx'));
@@ -168,21 +180,6 @@ test.describe.serial('Mark Tini desktop app', () => {
     const bytes = fs.readFileSync(exportedPath);
     expect(bytes.length).toBeGreaterThan(1_000);
     expect(bytes.subarray(0, 2).toString('ascii')).toBe('PK');
-  });
-
-  test('keeps the optional image-faithful PDF export in the sidebar', async ({ browserName }, testInfo) => {
-    expect(browserName).toBe('chromium');
-    const exportButton = page.getByRole('button', { name: 'DOCX giống PDF (dạng ảnh)', exact: true });
-    await expect(exportButton).toBeEnabled({ timeout: 30_000 });
-
-    const exportedPath = testInfo.outputPath(convertedFileName.replace(/\.pdf$/i, '-giong-pdf.docx'));
-    fs.mkdirSync(path.dirname(exportedPath), { recursive: true });
-    await electronApp.evaluate(({ dialog }, targetPath) => {
-      dialog.showSaveDialog = async () => ({ canceled: false, filePath: targetPath });
-    }, exportedPath);
-    await exportButton.click();
-    await expect(page.getByText('Đã tạo file Word giữ nguyên nội dung và bố cục PDF.')).toBeVisible({ timeout: 30_000 });
-    await expect.poll(() => fs.existsSync(exportedPath)).toBe(true);
   });
 
   test('restores the original PDF, extracts the full crop, and resizes the result panel', async () => {
@@ -254,14 +251,14 @@ test.describe.serial('Mark Tini desktop app', () => {
 test.describe('Tini Suite product boundaries', () => {
   test('launches the Tini OCR shell without Mark Tini controls', async () => {
     const ocrApp = await electron.launch({
-      args: [MAIN_ENTRY, '--product=tini-ocr'],
+      args: [MAIN_ENTRY, '--product=tini-ocr', ...ISOLATION_ARGS],
       env: electronEnv,
     });
     try {
       const ocrPage = await ocrApp.firstWindow();
       await expect(ocrPage).toHaveTitle('Tini OCR — Image to Text & Word');
       await expect(ocrPage.getByTestId('tini-ocr-shell')).toBeVisible();
-      await expect(ocrPage.getByRole('heading', { name: 'Biến ảnh chụp tài liệu thành nội dung có thể chỉnh sửa' })).toBeVisible();
+      await expect(ocrPage.getByRole('heading', { name: 'Chưa có ảnh nào' })).toBeVisible();
       await expect(ocrPage.getByRole('button', { name: 'Chọn ảnh' })).toBeVisible();
       await expect(ocrPage.getByRole('button', { name: 'Thêm file' })).toHaveCount(0);
     } finally {
@@ -271,8 +268,14 @@ test.describe('Tini Suite product boundaries', () => {
 
   test('opens Mark Tini and Tini OCR at the same time', async () => {
     const [markApp, ocrApp] = await Promise.all([
-      electron.launch({ args: [MAIN_ENTRY, '--product=mark-tini'], env: electronEnv }),
-      electron.launch({ args: [MAIN_ENTRY, '--product=tini-ocr'], env: electronEnv }),
+      electron.launch({
+        args: [MAIN_ENTRY, '--product=mark-tini', ...ISOLATION_ARGS],
+        env: electronEnv,
+      }),
+      electron.launch({
+        args: [MAIN_ENTRY, '--product=tini-ocr', ...ISOLATION_ARGS],
+        env: electronEnv,
+      }),
     ]);
     let markClosed = false;
     let ocrClosed = false;

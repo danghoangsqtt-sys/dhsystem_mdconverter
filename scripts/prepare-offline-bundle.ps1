@@ -121,7 +121,7 @@ $env:PYTHONNOUSERSITE = '1'
 $env:PYTHONPATH = $projectRoot
 Invoke-CheckedPython @(
     '-s', '-c',
-    "import sys; assert sys.prefix == sys.base_prefix; import asyncio, fastapi, uvicorn, docling, easyocr; from backend.src.services.docling_service import get_converter; get_converter(); from backend.src.services.translation_service import translate_text; result = asyncio.run(translate_text('The energy of a photon is given by the formula `$E=hf`$, where h is the Planck constant.')); assert result.strip(); assert '`$E=hf`$' in result, f'formula not preserved verbatim: {result!r}'; print('offline-runtime-ok')"
+    "import sys; assert sys.prefix == sys.base_prefix; import asyncio, fastapi, uvicorn, docling, easyocr; from backend.src.services.mark_tini.docling_service import get_converter; get_converter(); from backend.src.services.mark_tini.translation_service import translate_text; result = asyncio.run(translate_text('The energy of a photon is given by the formula `$E=hf`$, where h is the Planck constant.')); assert result.strip(); assert '`$E=hf`$' in result, f'formula not preserved verbatim: {result!r}'; print('offline-runtime-ok')"
 )
 
 if ($SmokeDocument) {
@@ -129,7 +129,7 @@ if ($SmokeDocument) {
     $env:DOCUMARK_SMOKE_DOCUMENT = $resolvedSmoke
     Invoke-CheckedPython @(
         '-s', '-c',
-        "import os; from backend.src.services.docling_service import convert_document_to_markdown; text=convert_document_to_markdown(os.environ['DOCUMARK_SMOKE_DOCUMENT']); assert text.strip(); print(f'offline-smoke-ok:{len(text)}')"
+        "import os; from backend.src.services.mark_tini.docling_service import convert_document_to_markdown; text=convert_document_to_markdown(os.environ['DOCUMARK_SMOKE_DOCUMENT']); assert text.strip(); print(f'offline-smoke-ok:{len(text)}')"
     )
 }
 

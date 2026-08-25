@@ -8,7 +8,7 @@ from pathlib import Path
 from docx import Document
 from PIL import Image
 
-from backend.src.services.ocr_export_service import build_ocr_export
+from backend.src.services.tini_ocr.ocr_export_service import build_ocr_export
 
 
 class OcrExportServiceTests(unittest.TestCase):

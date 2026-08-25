@@ -1,19 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Loader2, ScanText, Upload } from 'lucide-react';
-import Toast from '../../components/Toast';
-import type { ToastMessage } from '../../types';
+import Toast from '../../shared/components/Toast';
+import type { ToastMessage } from '../../shared/types';
 import { productStorageKey } from '../../shared/product';
 import OcrSidebar from './OcrSidebar';
 import OcrToolbar from './OcrToolbar';
+import { checkBackendHealth, ConversionCancelledError } from '../../shared/api';
 import {
-  checkBackendHealth,
-  ConversionCancelledError,
   exportImageOcr,
   recognizeImages,
   type ImageOcrPage,
   type ImageOcrPreset,
   type OcrExportFormat,
-} from '../../services/api';
+} from './api';
 
 export type ImageItem = {
   id: string;

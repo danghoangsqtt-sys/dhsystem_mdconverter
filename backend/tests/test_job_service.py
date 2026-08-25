@@ -9,7 +9,7 @@ import uuid
 from pathlib import Path
 from unittest.mock import patch
 
-from backend.src.services.job_service import ConversionJobManager, JobCapacityError
+from backend.src.services.mark_tini.job_service import ConversionJobManager, JobCapacityError
 
 
 class JobServiceTests(unittest.IsolatedAsyncioTestCase):
@@ -130,7 +130,7 @@ class JobServiceTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_history_failure_removes_partial_output(self) -> None:
         with patch(
-            "backend.src.services.job_service.history_service.append_history",
+            "backend.src.services.mark_tini.job_service.history_service.append_history",
             side_effect=OSError("disk error"),
         ):
             job = await self.submit("history-fails.pdf")

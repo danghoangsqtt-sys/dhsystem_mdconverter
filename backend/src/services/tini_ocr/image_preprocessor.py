@@ -14,6 +14,7 @@ from PIL import Image, ImageOps
 MAX_IMAGE_PIXELS = 50_000_000
 MAX_IMAGE_DIMENSION = 12_000
 SUPPORTED_PRESETS = {"original", "balanced", "high_contrast"}
+MIN_OCR_WIDTH = 1600
 
 
 class UnsafeImageError(ValueError):
@@ -95,6 +96,34 @@ def _correct_perspective(image: np.ndarray) -> tuple[np.ndarray, bool]:
     return image, False
 
 
+def _ensure_min_resolution(image: np.ndarray, min_width: int = MIN_OCR_WIDTH) -> tuple[np.ndarray, float]:
+    """Upscale a source image that's too small for reliable dense-text OCR.
+
+    EasyOCR's detector magnifies its own working canvas internally
+    (`mag_ratio`/`canvas_size`), but recognition crops are always cut from
+    the *source* array passed to `readtext()`, not from that internal
+    canvas — so a small source starves recognition of real detail no matter
+    how the detector is tuned. A phone photo of a full page can still look
+    "large" in absolute pixels while under 100 DPI once spread across the
+    whole page; that's a distinct problem from Mark Tini's small
+    PDF-viewer-crop upscaling in `docling_service.upscale_region_image`,
+    which targets crops that are inherently zoomed in already. Never
+    downscales, and caps the result at MAX_IMAGE_PIXELS so an extreme
+    aspect ratio can't blow past the same safety ceiling enforced on input.
+    """
+    height, width = image.shape[:2]
+    if width >= min_width:
+        return image, 1.0
+    scale = min_width / width
+    if (width * scale) * (height * scale) > MAX_IMAGE_PIXELS:
+        scale = (MAX_IMAGE_PIXELS / (width * height)) ** 0.5
+    if scale <= 1.0:
+        return image, 1.0
+    new_size = (max(1, round(width * scale)), max(1, round(height * scale)))
+    resized = cv2.resize(image, new_size, interpolation=cv2.INTER_LANCZOS4)
+    return resized, scale
+
+
 def _deskew(image: np.ndarray) -> tuple[np.ndarray, float]:
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)[1]
@@ -126,6 +155,10 @@ def preprocess_image(path: Path, preset: str = "balanced") -> PreprocessedImage:
     recipe: list[str] = ["safe-decode", "exif-transpose"]
     if preset == "original":
         return PreprocessedImage(image, image.shape[1], image.shape[0], tuple(recipe))
+
+    image, upscale_factor = _ensure_min_resolution(image)
+    if upscale_factor > 1.0:
+        recipe.append(f"upscale:{upscale_factor:.2f}x")
 
     image, perspective_applied = _correct_perspective(image)
     if perspective_applied:

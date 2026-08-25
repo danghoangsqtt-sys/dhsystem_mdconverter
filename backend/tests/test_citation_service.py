@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import httpx
 
-from backend.src.services import citation_service
+from backend.src.services.mark_tini import citation_service
 
 # Captured before any patching so the factory below never resolves back to
 # its own patched replacement (patching citation_service.httpx.AsyncClient
@@ -22,7 +22,7 @@ def _client_factory(handler):
 
 def _patch_client(handler):
     return patch(
-        "backend.src.services.citation_service.httpx.AsyncClient",
+        "backend.src.services.mark_tini.citation_service.httpx.AsyncClient",
         new=_client_factory(handler),
     )
 

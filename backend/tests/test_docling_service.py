@@ -7,8 +7,10 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from docling.datamodel.base_models import ConversionStatus, InputFormat
+from docx import Document
+from PIL import Image, ImageDraw
 
-from backend.src.services import docling_service
+from backend.src.services.mark_tini import docling_service, markdown_to_word_service
 
 
 class _FakeDocument:
@@ -16,7 +18,7 @@ class _FakeDocument:
         self._markdown = markdown
         self.texts = [SimpleNamespace(text=text) for text in (texts or [])]
 
-    def export_to_markdown(self) -> str:
+    def export_to_markdown(self, **_kwargs) -> str:
         return self._markdown
 
 
@@ -134,6 +136,58 @@ class DoclingServiceLargePdfTests(unittest.TestCase):
             low_text=0.2,
             link_threshold=0.2,
         )
+
+
+class DoclingServiceRealImageEmbeddingTests(unittest.TestCase):
+    """Real (non-mocked) Docling conversion - checks actual picture embedding, not just call shape."""
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.pdf_path = Path(self.temp_dir.name) / "diagram.pdf"
+        page = Image.new("RGB", (1240, 1754), color="white")
+        draw = ImageDraw.Draw(page)
+        draw.text((80, 80), "Bao cao ky thuat - so do khoi minh hoa ben duoi", fill="black")
+        draw.rectangle([150, 300, 450, 500], outline="black", width=6, fill=(220, 235, 255))
+        draw.rectangle([700, 300, 1000, 500], outline="black", width=6, fill=(255, 230, 210))
+        draw.line([450, 400, 700, 400], fill="black", width=6)
+        draw.polygon([(700, 380), (700, 420), (740, 400)], fill="black")
+        draw.text((200, 390), "Buoc 1", fill="black")
+        draw.text((760, 390), "Buoc 2", fill="black")
+        page.save(self.pdf_path, "PDF", resolution=150.0)
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def test_real_pdf_diagram_is_embedded_as_base64_image_not_placeholder(self) -> None:
+        markdown = docling_service.convert_document_to_markdown(
+            str(self.pdf_path),
+            lang="en",
+            table_mode="fast",
+        )
+        self.assertIn("data:image/", markdown)
+        self.assertNotIn("<!-- image -->", markdown)
+
+    def test_real_pdf_image_still_embeds_in_docx_when_filename_header_is_present(self) -> None:
+        """Regression test: the `<!-- Source file: ... -->` header stamped
+        when original_filename is set used to be joined to the markdown that
+        follows by a literal `\\n\\n` (four characters) instead of a real
+        blank line, so markdown-it parsed the header and the very next image
+        as one paragraph. `_sole_image_child` then no longer matched, and
+        that image silently fell back to `[Hình ảnh]` text in the exported
+        DOCX instead of a real embedded picture."""
+        markdown = docling_service.convert_document_to_markdown(
+            str(self.pdf_path),
+            lang="en",
+            table_mode="fast",
+            original_filename="giao-trinh.pdf",
+        )
+        expected_image_count = markdown.count("data:image/")
+        self.assertGreater(expected_image_count, 0)
+
+        docx_path = Path(self.temp_dir.name) / "output.docx"
+        markdown_to_word_service.convert_markdown_to_docx(markdown, docx_path)
+        document = Document(str(docx_path))
+        self.assertEqual(len(document.inline_shapes), expected_image_count)
 
 
 if __name__ == "__main__":

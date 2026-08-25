@@ -327,7 +327,11 @@ app.on('activate', () => {
 app.whenReady().then(async () => {
   app.setAppUserModelId(PRODUCT.appUserModelId);
   coreSupervisor = new TiniCoreSupervisor({
-    appDataDir: app.getPath('appData'),
+    // Override hook for e2e tests only (see frontend/e2e/testUserData.ts) -
+    // redirects the "Tini Suite" data/session root away from the real
+    // %APPDATA%\Tini Suite profile. Unset in dev and packaged builds, so
+    // app.getPath('appData') is used exactly as before.
+    appDataDir: process.env.DOCUMARK_APP_DATA_DIR || app.getPath('appData'),
     legacyUserDataDir: app.getPath('userData'),
     projectRoot: PROJECT_ROOT,
     productId: PRODUCT_ID,

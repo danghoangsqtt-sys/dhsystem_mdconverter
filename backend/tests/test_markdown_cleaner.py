@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from backend.src.services.markdown_cleaner import clean_markdown
+from backend.src.services.mark_tini.markdown_cleaner import clean_markdown
 
 
 def build_complex_table(*rows: list[str]) -> str:

@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import backend.src.main as main
-from backend.src.services import history_service
+from backend.src.services.mark_tini import history_service
 
 
 class StartupCleanupTests(unittest.TestCase):

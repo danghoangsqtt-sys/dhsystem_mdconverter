@@ -10,27 +10,15 @@ from typing import Any
 
 from PIL import Image
 
-from ..config import settings
+from ...config import settings
 
 from .markdown_cleaner import clean_markdown
-from .resource_scheduler import heavy_job_slot
+from ..shared.easyocr_reader import DEFAULT_OCR_LANG, OCR_LANG_PRESETS, get_region_reader
+from ..shared.resource_scheduler import heavy_job_slot
 
 # Set up simple logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# ──────────────────────────────────────────────────────────────
-# OCR language presets exposed to the frontend. EasyOCR needs explicit
-# language codes (no "auto-detect"), so we offer a small fixed menu rather
-# than a free-text field. "vi_en" (the original hardcoded behavior) stays
-# the default — it's the safest choice for mixed-language documents.
-# ──────────────────────────────────────────────────────────────
-OCR_LANG_PRESETS: dict[str, list[str]] = {
-    "vi_en": ["vi", "en"],
-    "vi": ["vi"],
-    "en": ["en"],
-}
-DEFAULT_OCR_LANG = "vi_en"
 
 # TableFormerMode.ACCURATE: better handling of merged cells, multi-row
 # headers, complex table structures — but ~2-3x slower than FAST. Exposed
@@ -62,8 +50,6 @@ PDF_FALLBACK_MAX_DIMENSION = 2200
 # default combination is warmed up eagerly at startup (see warm_up_models).
 _converter_cache: dict[tuple[str, str], Any] = {}
 _cache_lock = threading.Lock()
-_region_reader_cache: dict[str, Any] = {}
-_region_reader_lock = threading.Lock()
 
 
 def _build_converter(lang_key: str, table_mode_key: str) -> Any:
@@ -104,6 +90,13 @@ def _build_converter(lang_key: str, table_mode_key: str) -> Any:
     # Uses the local CodeFormulaV2 model (bundled offline, no remote calls).
     pipeline_options.do_formula_enrichment = True
     pipeline_options.do_code_enrichment = True
+    # Needed so picture/diagram bitmaps are retained during the single Docling
+    # pass and can be embedded in exported Markdown/Word — without this,
+    # export_to_markdown() has no image data to embed regardless of image_mode.
+    # 2.0 ~= 144 DPI for picture crops (not full pages), a modest per-document
+    # cost compared to a full page raster.
+    pipeline_options.generate_picture_images = True
+    pipeline_options.images_scale = 2.0
 # Increased from 1 to improve throughput on modern CPUs (4+ cores).
     # Memory stays bounded because PDF_CHUNK_SIZE limits concurrent pages.
     # Tuned for typical Windows machines with 8-16GB RAM.
@@ -242,32 +235,6 @@ class IncompleteDocumentConversionError(RuntimeError):
     """Raised when Docling could not account for every requested page."""
 
 
-def get_region_reader(lang_key: str = DEFAULT_OCR_LANG) -> Any:
-    """Return the shared direct EasyOCR reader used by crops and Tini OCR."""
-    if lang_key not in OCR_LANG_PRESETS:
-        lang_key = DEFAULT_OCR_LANG
-    with _region_reader_lock:
-        reader = _region_reader_cache.get(lang_key)
-        if reader is not None:
-            return reader
-
-        import easyocr
-
-        model_dir: str | None = None
-        if settings.docling_artifacts_path is not None:
-            candidate = settings.docling_artifacts_path / "EasyOcr"
-            if candidate.is_dir():
-                model_dir = str(candidate)
-        reader = easyocr.Reader(
-            OCR_LANG_PRESETS[lang_key],
-            gpu=False,
-            model_storage_directory=model_dir,
-            download_enabled=not settings.offline_mode,
-        )
-        _region_reader_cache[lang_key] = reader
-        return reader
-
-
 def _extract_region_text(image_path: Path, lang_key: str) -> str:
     """OCR every pixel in a user-selected crop without layout filtering.
 
@@ -312,6 +279,7 @@ def _is_complete_result(result: Any, expected_pages: int | None = None) -> bool:
 
 def _export_result(result: Any) -> str:
     from docling.datamodel.base_models import InputFormat
+    from docling_core.types.doc import ImageRefMode
 
     if result.input.format == InputFormat.IMAGE:
         # Image inputs are user-selected OCR regions or raster fallbacks for a
@@ -322,7 +290,12 @@ def _export_result(result: Any) -> str:
             for item in result.document.texts
             if item.text and item.text.strip()
         )
-    return result.document.export_to_markdown()
+    # EMBEDDED inlines each picture/diagram as a base64 data URI directly in
+    # the Markdown string, instead of the default PLACEHOLDER (`<!-- image -->`).
+    # Keeps the document a single self-contained string, matching how job
+    # storage/history/autosave/editor already treat it — no sibling image
+    # folder to invent and thread through those systems.
+    return result.document.export_to_markdown(image_mode=ImageRefMode.EMBEDDED)
 
 
 def _get_pdf_page_count(file_path: Path) -> int:
@@ -504,7 +477,7 @@ def convert_document_to_markdown(
         # Add metadata header with original filename for traceability
         # Frontend can use this to offer "Open Original" button
         if original_filename:
-            metadata = f"<!-- Source file: {original_filename} -->\\n\\n"
+            metadata = f"<!-- Source file: {original_filename} -->\n\n"
             cleaned_markdown = metadata + cleaned_markdown
 
         return cleaned_markdown

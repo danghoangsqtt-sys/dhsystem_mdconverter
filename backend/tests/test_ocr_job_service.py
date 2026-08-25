@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from backend.src.services.ocr_job_service import (
+from backend.src.services.tini_ocr.ocr_job_service import (
     OcrInput,
     OcrJobCapacityError,
     OcrJobManager,
@@ -59,7 +59,7 @@ class OcrJobServiceTests(unittest.TestCase):
         def fake_recognize(path, *, filename, index, preset, engine):
             return _fake_page(index, filename, engine, text="hello")
 
-        with patch("backend.src.services.ocr_job_service.recognize_image", side_effect=fake_recognize):
+        with patch("backend.src.services.tini_ocr.ocr_job_service.recognize_image", side_effect=fake_recognize):
             job = self.manager.create([self.make_input("a.png")], preset="balanced", engine="easyocr")
             done = self.wait_for(self.manager, job, {"complete", "error"})
 
@@ -74,7 +74,7 @@ class OcrJobServiceTests(unittest.TestCase):
                 raise RuntimeError("boom")
             return _fake_page(index, filename, engine, text="ok")
 
-        with patch("backend.src.services.ocr_job_service.recognize_image", side_effect=fake_recognize):
+        with patch("backend.src.services.tini_ocr.ocr_job_service.recognize_image", side_effect=fake_recognize):
             job = self.manager.create(
                 [self.make_input("a.png"), self.make_input("b.png")],
                 preset="balanced",
@@ -95,7 +95,7 @@ class OcrJobServiceTests(unittest.TestCase):
             gate.wait(timeout=2)
             return _fake_page(index, filename, engine)
 
-        with patch("backend.src.services.ocr_job_service.recognize_image", side_effect=blocked_recognize):
+        with patch("backend.src.services.tini_ocr.ocr_job_service.recognize_image", side_effect=blocked_recognize):
             job = self.manager.create([self.make_input("a.png")], preset="balanced", engine="easyocr")
             try:
                 with self.assertRaises(OcrResultNotReadyError):
@@ -117,7 +117,7 @@ class OcrJobServiceTests(unittest.TestCase):
             gate.wait(timeout=2)
             return _fake_page(index, filename, engine)
 
-        with patch("backend.src.services.ocr_job_service.recognize_image", side_effect=blocked_recognize):
+        with patch("backend.src.services.tini_ocr.ocr_job_service.recognize_image", side_effect=blocked_recognize):
             job = self.manager.create(
                 [self.make_input("a.png"), self.make_input("b.png")],
                 preset="balanced",
@@ -135,7 +135,7 @@ class OcrJobServiceTests(unittest.TestCase):
         def fake_recognize(path, *, filename, index, preset, engine):
             return _fake_page(index, filename, engine)
 
-        with patch("backend.src.services.ocr_job_service.recognize_image", side_effect=fake_recognize):
+        with patch("backend.src.services.tini_ocr.ocr_job_service.recognize_image", side_effect=fake_recognize):
             input_ = self.make_input("a.png")
             job = self.manager.create([input_], preset="balanced", engine="easyocr")
             self.wait_for(self.manager, job, {"complete"})
@@ -153,7 +153,7 @@ class OcrJobServiceTests(unittest.TestCase):
             return _fake_page(index, filename, engine)
 
         manager = OcrJobManager(max_records=100, max_active_jobs=1)
-        with patch("backend.src.services.ocr_job_service.recognize_image", side_effect=blocked_recognize):
+        with patch("backend.src.services.tini_ocr.ocr_job_service.recognize_image", side_effect=blocked_recognize):
             first = manager.create([self.make_input("a.png")], preset="balanced", engine="easyocr")
             try:
                 with self.assertRaises(OcrJobCapacityError):
@@ -171,7 +171,7 @@ class OcrJobServiceTests(unittest.TestCase):
             return _fake_page(index, filename, engine)
 
         manager = OcrJobManager(max_records=1, max_active_jobs=10)
-        with patch("backend.src.services.ocr_job_service.recognize_image", side_effect=fake_recognize):
+        with patch("backend.src.services.tini_ocr.ocr_job_service.recognize_image", side_effect=fake_recognize):
             first = manager.create([self.make_input("a.png")], preset="balanced", engine="easyocr")
             self.wait_for(manager, first, {"complete"})
             second = manager.create([self.make_input("b.png")], preset="balanced", engine="easyocr")

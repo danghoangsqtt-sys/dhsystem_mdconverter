@@ -3,13 +3,13 @@ from __future__ import annotations
 import io
 import unittest
 from dataclasses import replace
-from pathlib import Path
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from docx import Document
 
 import backend.src.main as main
+import backend.src.services.mark_tini.router as mark_tini_router
 
 
 class ApiSecurityTests(unittest.TestCase):
@@ -135,13 +135,6 @@ class ApiSecurityTests(unittest.TestCase):
         response = self.client.post("/api/translate", json={"text": "some text"})
         self.assertEqual(response.status_code, 401)
 
-    def test_faithful_pdf_to_word_export_requires_session_token(self) -> None:
-        response = self.client.post(
-            "/api/export/pdf-to-word-faithful",
-            files={"file": ("paper.pdf", b"%PDF-1.4", "application/pdf")},
-        )
-        self.assertEqual(response.status_code, 401)
-
     def test_editable_word_export_requires_session_token(self) -> None:
         response = self.client.post(
             "/api/export/markdown-to-word",
@@ -173,33 +166,6 @@ class ApiSecurityTests(unittest.TestCase):
             files={"files": ("paper.pdf", b"%PDF-1.4", "application/pdf")},
         )
         self.assertEqual(response.status_code, 415)
-
-    def test_pdf_to_word_export_rejects_non_pdf_before_processing(self) -> None:
-        response = self.client.post(
-            "/api/export/pdf-to-word-faithful",
-            headers=self.auth,
-            files={"file": ("paper.docx", b"PK", "application/octet-stream")},
-        )
-        self.assertEqual(response.status_code, 415)
-        self.assertIn("chỉ nhận file PDF", response.json()["detail"])
-
-    def test_pdf_to_word_export_returns_complete_docx_and_cleans_temporary_files(self) -> None:
-        sample_pdf = Path(__file__).resolve().parents[2] / "frontend" / "e2e" / "fixtures" / "sample.pdf"
-        uploads_before = set(main.settings.upload_dir.glob("*"))
-        docx_before = set(main.settings.output_dir.glob("*.docx"))
-
-        response = self.client.post(
-            "/api/export/pdf-to-word-faithful",
-            headers=self.auth,
-            files={"file": ("fixture.pdf", sample_pdf.read_bytes(), "application/pdf")},
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.content.startswith(b"PK"))
-        self.assertEqual(response.headers["x-documark-page-count"], "1")
-        self.assertIn("fixture-giong-pdf.docx", response.headers["content-disposition"])
-        self.assertEqual(uploads_before, set(main.settings.upload_dir.glob("*")))
-        self.assertEqual(docx_before, set(main.settings.output_dir.glob("*.docx")))
 
     def test_editable_word_export_contains_native_text_and_cleans_output(self) -> None:
         docx_before = set(main.settings.output_dir.glob("*.docx"))
@@ -242,7 +208,7 @@ class ApiSecurityTests(unittest.TestCase):
     def test_upload_limit_is_enforced_and_partial_file_is_removed(self) -> None:
         tiny_limit_settings = replace(main.settings, max_upload_bytes=4)
         before = set(main.settings.upload_dir.glob("*"))
-        with patch.object(main, "settings", tiny_limit_settings):
+        with patch.object(mark_tini_router, "settings", tiny_limit_settings):
             response = self.client.post(
                 "/api/jobs",
                 headers=self.auth,

@@ -57,14 +57,7 @@ Với PDF nhiều trang, hệ thống tự chia nhỏ theo từng cụm trang kh
 
 ## 4. Xuất ra Word
 
-Sau khi có nội dung (đã convert hoặc đang soạn), thanh công cụ phía trên khung soạn thảo có 2 nút xuất Word, phục vụ hai nhu cầu khác nhau:
-
-| Nút | Dùng khi nào | Kết quả |
-|---|---|---|
-| **Xuất Word chỉnh sửa được** | Cần sửa tiếp nội dung trong Word (heading, đoạn văn, bảng, danh sách) | File .docx với văn bản Word thật, sửa chữ trực tiếp được |
-| **Xuất Word giống PDF** | Cần giữ đúng bố cục gốc — công thức phức tạp, sơ đồ, hình ảnh, hướng trang | File .docx mà mỗi trang là ảnh chụp lại đúng như PDF gốc, không sửa chữ trực tiếp được |
-
-Xuất Word chỉnh sửa được dùng ngay nội dung Markdown bạn đang xem/đã sửa trong Mark Tini, nên phản ánh đúng những gì bạn đã chỉnh sửa. Xuất Word giống PDF cần file PDF gốc và dựng lại từng trang từ đầu nên có thể mất thêm thời gian với file nhiều trang.
+Sau khi có nội dung (đã convert hoặc đang soạn), thanh công cụ phía trên khung soạn thảo có nút **Xuất Word**, dựng nội dung Markdown bạn đang xem/đã sửa trong Mark Tini thành file .docx chỉnh sửa được: heading, đoạn văn, bảng, danh sách trở thành văn bản Word thật sửa chữ trực tiếp được, còn hình ảnh/sơ đồ khối trong tài liệu gốc được tách và nhúng lại thành ảnh Word thật — căn giữa, tự co theo chiều rộng trang.
 
 Khi bấm xuất, hộp thoại **Lưu thành** cho phép chọn thẳng thư mục đích — kể cả USB hoặc ổ đĩa ngoài — không bắt buộc phải lưu vào Downloads.
 
@@ -151,7 +144,7 @@ Nếu hệ thống đang xử lý quá nhiều lô cùng lúc (hiếm khi xảy 
 
 **Xác minh trích dẫn không trả kết quả:** kiểm tra máy đang có kết nối mạng — đây là tính năng duy nhất cần internet, mọi tính năng khác đều hoạt động khi offline.
 
-**Xuất Word báo lỗi với file rất lớn:** xuất Word chỉnh sửa được có giới hạn khoảng 10 triệu ký tự Markdown mỗi lượt — với tài liệu cực lớn, cân nhắc tách nhỏ hoặc dùng chế độ xuất giống PDF thay thế.
+**Xuất Word báo lỗi với file rất lớn:** xuất Word chỉnh sửa được có giới hạn khoảng 10 triệu ký tự Markdown mỗi lượt — với tài liệu cực lớn (đặc biệt nhiều ảnh/sơ đồ được nhúng), cân nhắc tách nhỏ tài liệu trước khi convert, hoặc chuyển bảng sang **table_mode: fast** để giảm dung lượng Markdown sinh ra.
 
 **Muốn xem log chi tiết khi báo lỗi:** log của Tini Suite (dùng chung cho cả Mark Tini và Tini OCR) nằm tại:
 
@@ -177,7 +170,7 @@ Những thay đổi đáng chú ý nhất so với các bản 1.3.x:
 
 - Gộp thành **Tini Suite** — một bộ cài, hai ứng dụng dùng chung phần lõi xử lý.
 - Thêm **Tini OCR** — nhận dạng ảnh chụp hàng loạt, review theo trang, xuất 4 định dạng.
-- Thêm **2 chế độ xuất Word** trực tiếp từ Mark Tini.
+- Thêm **xuất Word chỉnh sửa được** trực tiếp từ Mark Tini, gồm cả ảnh/sơ đồ khối được tách và nhúng thật.
 - Xử lý ổn định hơn với PDF rất nhiều trang.
 - Lịch sử giữ lại được file gốc đã upload để tải lại khi cần.
 - Có thể chọn nguyên một thư mục để chuyển đổi hàng loạt trong Mark Tini.

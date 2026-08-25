@@ -8,12 +8,16 @@ headings, lists, tables and inline emphasis.
 
 from __future__ import annotations
 
+import base64
+import binascii
+import io
 from pathlib import Path
 from typing import Iterable, Sequence
 
 from docx import Document
 from docx.document import Document as DocumentType
 from docx.enum.table import WD_TABLE_ALIGNMENT
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Pt
 from markdown_it import MarkdownIt
 from markdown_it.token import Token
@@ -21,6 +25,54 @@ from markdown_it.token import Token
 
 class MarkdownToWordError(RuntimeError):
     """Raised when reviewed Markdown cannot be exported to DOCX."""
+
+
+def _decode_data_uri(src: str) -> io.BytesIO | None:
+    if not src.startswith("data:image/"):
+        return None
+    _header, _, payload = src.partition(";base64,")
+    if not payload:
+        return None
+    try:
+        return io.BytesIO(base64.b64decode(payload, validate=True))
+    except (binascii.Error, ValueError):
+        return None
+
+
+def _sole_image_child(inline_token: Token | None) -> Token | None:
+    if inline_token is None:
+        return None
+    children = inline_token.children or []
+    if len(children) == 1 and children[0].type == "image":
+        return children[0]
+    return None
+
+
+def _add_image_paragraph(document: DocumentType, token: Token) -> None:
+    alt_text = token.content or token.attrGet("alt") or "Hình ảnh"
+    image_stream = _decode_data_uri(token.attrGet("src") or "")
+
+    paragraph = document.add_paragraph()
+    paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    if image_stream is not None:
+        try:
+            run = paragraph.add_run()
+            picture = run.add_picture(image_stream)
+            section = document.sections[0]
+            max_width = section.page_width - section.left_margin - section.right_margin
+            if max_width > 0 and picture.width > max_width:
+                scale = max_width / picture.width
+                picture.width = int(picture.width * scale)
+                picture.height = int(picture.height * scale)
+            return
+        except Exception:
+            # Corrupt/unsupported image bytes: fall through to the text
+            # fallback below instead of failing the whole export.
+            pass
+
+    run = paragraph.add_run(f"[{alt_text}]")
+    run.italic = True
 
 
 def _plain_text(tokens: Iterable[Token]) -> str:
@@ -159,10 +211,15 @@ def convert_markdown_to_docx(
                 if index + 1 < len(tokens) and tokens[index + 1].type == "inline":
                     _add_inline(paragraph, tokens[index + 1])
             elif token.type == "paragraph_open":
-                style = list_stack[-1] if list_stack else None
-                paragraph = document.add_paragraph(style=style)
-                if index + 1 < len(tokens) and tokens[index + 1].type == "inline":
-                    _add_inline(paragraph, tokens[index + 1])
+                inline_token = tokens[index + 1] if index + 1 < len(tokens) and tokens[index + 1].type == "inline" else None
+                sole_image = _sole_image_child(inline_token)
+                if sole_image is not None:
+                    _add_image_paragraph(document, sole_image)
+                else:
+                    style = list_stack[-1] if list_stack else None
+                    paragraph = document.add_paragraph(style=style)
+                    if inline_token is not None:
+                        _add_inline(paragraph, inline_token)
             elif token.type in {"fence", "code_block"}:
                 paragraph = document.add_paragraph(style="No Spacing")
                 run = paragraph.add_run(token.content.rstrip("\n"))

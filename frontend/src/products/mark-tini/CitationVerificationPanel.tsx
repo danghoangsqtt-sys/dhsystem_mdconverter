@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, BadgeCheck, BadgeAlert, BadgeX, Sparkles, AlertTriangle, Download, Copy, Check } from 'lucide-react';
-import type { CitationVerificationEntry, CitationMatch } from '../types';
+import type { CitationVerificationEntry, CitationMatch } from './types';
 
 interface CitationVerificationPanelProps {
   results: CitationVerificationEntry[];

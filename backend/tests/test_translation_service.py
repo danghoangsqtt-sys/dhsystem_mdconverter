@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from backend.src.services import translation_service
+from backend.src.services.mark_tini import translation_service
 
 
 class MaskFormulasTests(unittest.TestCase):

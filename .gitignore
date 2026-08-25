@@ -24,6 +24,7 @@ __pycache__/
 
 # Environment
 docling-env/
+ocr-eval-env-312/
 python_runtime/
 offline_models/
 .env

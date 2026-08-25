@@ -1,4 +1,4 @@
-import type { SourceFileMetadata } from '../types';
+import type { SourceFileMetadata } from './types';
 
 const SOURCE_FILE_REGEX = /<!--\s*Source file:\s*([^>]+)\s*-->/;
 

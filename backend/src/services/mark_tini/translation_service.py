@@ -30,7 +30,7 @@ import re
 import threading
 from typing import TYPE_CHECKING, Any
 
-from ..config import settings
+from ...config import settings
 from .translation_glossaries import DOMAINS
 
 if TYPE_CHECKING:

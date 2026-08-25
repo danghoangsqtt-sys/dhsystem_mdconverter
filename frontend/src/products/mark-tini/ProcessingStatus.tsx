@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { CheckCircle2, Clock3, FileUp, Loader2, ScanText, Sparkles, Terminal, XCircle } from 'lucide-react';
-import type { ProcessingStage } from '../types';
+import type { ProcessingStage } from './types';
 
 interface ProcessingStatusProps {
   isProcessing: boolean;

@@ -1,7 +1,7 @@
 import React from 'react';
 import { X, Languages } from 'lucide-react';
-import type { TranslationEntry } from '../types';
-import { TRANSLATION_DOMAIN_OPTIONS } from '../services/api';
+import type { TranslationEntry } from './types';
+import { TRANSLATION_DOMAIN_OPTIONS } from './api';
 
 interface TranslationPanelProps {
   results: TranslationEntry[];

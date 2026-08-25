@@ -10,7 +10,7 @@ import {
   X,
 } from 'lucide-react';
 import { productStorageKey } from '../../shared/product';
-import type { ImageOcrPreset } from '../../services/api';
+import type { ImageOcrPreset } from './api';
 import type { ImageItem, Stage } from './TiniOcrApp';
 
 const MIN_WIDTH = 200;
