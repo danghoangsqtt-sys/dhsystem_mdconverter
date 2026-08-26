@@ -232,6 +232,11 @@ export class TiniCoreSupervisor {
       throw new Error(`Không tìm thấy model offline: ${offlineModelsPath}`);
     }
 
+    // Installer upgrades remove the session descriptor so new code never
+    // attaches to stale code. The old detached Python process can still hold
+    // this application's private localhost port, so reclaim it before spawn.
+    this.stopCorePortOccupant();
+
     const environment: NodeJS.ProcessEnv = {
       ...process.env,
       DOCUMARK_API_TOKEN: token,
@@ -383,6 +388,20 @@ export class TiniCoreSupervisor {
       spawnSync('taskkill', ['/pid', String(pid), '/f', '/t'], { windowsHide: true, stdio: 'ignore' });
     } else {
       try { process.kill(pid, 'SIGTERM'); } catch { /* already stopped */ }
+    }
+  }
+
+  private stopCorePortOccupant() {
+    if (process.platform !== 'win32') return;
+    const result = spawnSync('netstat', ['-ano', '-p', 'tcp'], {
+      windowsHide: true,
+      encoding: 'utf8',
+    });
+    if (result.status !== 0 || !result.stdout) return;
+
+    for (const line of result.stdout.split(/\r?\n/)) {
+      const match = line.match(new RegExp(`^\\s*TCP\\s+\\S+:${CORE_PORT}\\s+\\S+\\s+LISTENING\\s+(\\d+)\\s*$`, 'i'));
+      if (match) this.stopProcess(Number(match[1]));
     }
   }
 
