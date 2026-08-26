@@ -138,8 +138,9 @@ def _dedupe_and_order(lines: list[dict[str, object]]) -> list[dict[str, object]]
     return [lines[i] for i in ordered]
 
 
-def _easy_lines(pixels: np.ndarray) -> list[dict[str, object]]:
-    results = _get_easyocr().readtext(
+def _easy_lines(pixels: np.ndarray, lang_key: str = DEFAULT_OCR_LANG) -> list[dict[str, object]]:
+    reader = get_region_reader(lang_key)
+    results = reader.readtext(
         pixels,
         detail=1,
         paragraph=False,
@@ -165,12 +166,13 @@ def recognize_image(
     index: int,
     preset: str = "balanced",
     engine: str = DEFAULT_IMAGE_OCR_ENGINE,
+    lang: str = DEFAULT_OCR_LANG,
 ) -> dict[str, object]:
     if engine not in SUPPORTED_IMAGE_OCR_ENGINES:
         raise ValueError(f"Engine OCR không hợp lệ: {engine}")
     processed = preprocess_image(path, preset)
     with heavy_job_slot(f"image-ocr:{engine}"):
-        lines = _easy_lines(processed.pixels)
+        lines = _easy_lines(processed.pixels, lang)
     text = "\n".join(str(line["text"]) for line in lines)
     confidence = (
         round(sum(float(line["confidence"]) for line in lines) / len(lines), 5)

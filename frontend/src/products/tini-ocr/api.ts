@@ -8,6 +8,7 @@ const CONVERSION_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 export type ImageOcrPreset = 'original' | 'balanced' | 'high_contrast';
 export type ImageOcrEngine = 'easyocr';
 export type OcrExportFormat = 'txt' | 'markdown' | 'docx-editable' | 'docx-faithful';
+export type OcrLanguage = 'vi_en' | 'vi' | 'en';
 
 export interface ImageOcrLine {
   text: string;
@@ -51,12 +52,14 @@ export const createImageOcrJob = async (
   files: File[],
   preset: ImageOcrPreset,
   engine: ImageOcrEngine,
+  language: OcrLanguage,
   signal?: AbortSignal,
 ): Promise<ImageOcrJobState> => {
   const formData = new FormData();
   files.forEach(file => formData.append('files', file));
   formData.append('preset', preset);
   formData.append('engine', engine);
+  formData.append('language', language);
   try {
     const response = await axios.post<ImageOcrJobState>(`${API_BASE_URL}/ocr/jobs`, formData, {
       headers: { ...(await authHeaders()), 'Content-Type': 'multipart/form-data' },
@@ -98,6 +101,7 @@ export const recognizeImages = async (
   options: {
     preset?: ImageOcrPreset;
     engine?: ImageOcrEngine;
+    language?: OcrLanguage;
     signal?: AbortSignal;
     onJobStatus?: (job: ImageOcrJobState) => void;
   } = {},
@@ -106,6 +110,7 @@ export const recognizeImages = async (
     files,
     options.preset ?? 'balanced',
     options.engine ?? 'easyocr',
+    options.language ?? 'vi_en',
     options.signal,
   );
   options.onJobStatus?.(created);

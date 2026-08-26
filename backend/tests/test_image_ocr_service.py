@@ -78,7 +78,7 @@ class ImageOcrServiceTests(unittest.TestCase):
             self.skipTest(f"EasyOCR chưa sẵn sàng trên máy này: {exc}")
 
         result = image_ocr_service.recognize_image(
-            image_path, filename="vn_diacritics.png", index=0, preset="original"
+            image_path, filename="vn_diacritics.png", index=0, preset="original", lang="vi_en"
         )
 
         self.assertEqual(result["engine"], "easyocr")
@@ -134,6 +134,7 @@ class ImageOcrServiceTests(unittest.TestCase):
                     [OcrInput("first.png", first), OcrInput("second.png", second)],
                     preset="original",
                     engine="easyocr",
+                    language="vi_en",
                 )
                 manager.cancel(job.job_id)
                 deadline = time.time() + 3

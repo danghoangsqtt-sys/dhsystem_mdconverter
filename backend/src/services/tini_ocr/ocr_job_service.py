@@ -28,6 +28,7 @@ class OcrJob:
     inputs: list[OcrInput]
     preset: str
     engine: str
+    language: str
     status: str = "queued"
     progress: int = 0
     message: str = "Đang chờ xử lý ảnh."
@@ -74,8 +75,8 @@ class OcrJobManager:
         self._max_records = max_records
         self._max_active_jobs = max_active_jobs
 
-    def create(self, inputs: list[OcrInput], *, preset: str, engine: str) -> OcrJob:
-        job = OcrJob(str(uuid.uuid4()), inputs, preset, engine)
+    def create(self, inputs: list[OcrInput], *, preset: str, engine: str, language: str) -> OcrJob:
+        job = OcrJob(str(uuid.uuid4()), inputs, preset, engine, language)
         with self._lock:
             active = sum(1 for existing in self._jobs.values() if existing.status not in _TERMINAL_STATUSES)
             if active >= self._max_active_jobs:
@@ -102,6 +103,7 @@ class OcrJobManager:
             "job_id": job.job_id,
             "engine": job.engine,
             "preset": job.preset,
+            "language": job.language,
             "pages": list(job.pages),
         }
 
@@ -128,6 +130,7 @@ class OcrJobManager:
                         index=index,
                         preset=job.preset,
                         engine=job.engine,
+                        lang=job.language,
                     )
                 except Exception as exc:  # one bad page must not hide other results
                     page = {

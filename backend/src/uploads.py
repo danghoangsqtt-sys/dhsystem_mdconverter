@@ -27,8 +27,8 @@ _MAGIC_SIGNATURES: dict[str, tuple[bytes, ...]] = {
     ".png": (b"\x89PNG\r\n\x1a\n",),
     ".jpg": (b"\xff\xd8\xff",),
     ".jpeg": (b"\xff\xd8\xff",),
-    ".tif": (b"II*\x00", b"MM\x00*"),
-    ".tiff": (b"II*\x00", b"MM\x00*"),
+    ".tif": (b"II*\x00", b"MM\x00*", b"II+\x00", b"MM+\x00"),
+    ".tiff": (b"II*\x00", b"MM\x00*", b"II+\x00", b"MM+\x00"),
     ".bmp": (b"BM",),
 }
 # docx/pptx share the OOXML zip container, so a header check alone can't tell

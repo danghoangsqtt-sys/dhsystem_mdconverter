@@ -28,11 +28,43 @@ process.on('uncaughtException', (err) => {
   } catch {
     // dialog might not be ready yet
   }
+  // Attempt graceful shutdown on uncaught exception
+  if (!shutdownStarted) {
+    shutdownStarted = true;
+    // Force exit after cleanup attempt
+    setTimeout(() => process.exit(1), 2000).unref();
+    void shutdownApplication();
+  }
 });
+
+process.on('unhandledRejection', (reason) => {
+  safeLog('Unhandled rejection:', reason);
+  // Don't crash, but log for debugging
+});
+
+// Handle termination signals for graceful shutdown
+const shutdownSignals = ['SIGTERM', 'SIGINT', 'SIGBREAK'] as const;
+for (const signal of shutdownSignals) {
+  process.on(signal, () => {
+    safeLog(`Received ${signal}, shutting down gracefully...`);
+    if (!shutdownStarted) {
+      void shutdownApplication();
+    }
+  });
+}
 
 // Prevent EPIPE on stdout/stderr themselves
 process.stdout?.on('error', () => {});
 process.stderr?.on('error', () => {});
+
+// Final cleanup on process exit (last resort)
+process.on('exit', () => {
+  if (ollamaProcess?.pid && !ollamaProcess.killed) {
+    try {
+      process.kill(ollamaProcess.pid, 'SIGKILL');
+    } catch { /* ignore */ }
+  }
+});
 
 // `__dirname` is a native CommonJS global — the build now compiles this file
 // to real CJS output (see vite.config.ts), so no ESM `import.meta.url` shim
@@ -336,6 +368,7 @@ app.whenReady().then(async () => {
     projectRoot: PROJECT_ROOT,
     productId: PRODUCT_ID,
     packaged: app.isPackaged,
+    appVersion: app.getVersion(),
     log: safeLog,
   });
 

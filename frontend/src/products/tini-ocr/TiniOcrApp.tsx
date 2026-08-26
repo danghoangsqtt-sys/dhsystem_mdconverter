@@ -12,6 +12,7 @@ import {
   type ImageOcrPage,
   type ImageOcrPreset,
   type OcrExportFormat,
+  type OcrLanguage,
 } from './api';
 
 export type ImageItem = {
@@ -56,7 +57,9 @@ export default function TiniOcrApp() {
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const [images, setImages] = useState<ImageItem[]>([]);
+  const imagesRef = useRef(images);
   const [preset, setPreset] = useState<ImageOcrPreset>('balanced');
+  const [ocrLanguage, setOcrLanguage] = useState<OcrLanguage>('vi_en');
   const [stage, setStage] = useState<Stage>('idle');
   const [jobProgress, setJobProgress] = useState(0);
   const [jobMessage, setJobMessage] = useState('');
@@ -101,12 +104,14 @@ export default function TiniOcrApp() {
     [images],
   );
 
-  // Object URLs are only released when the list they belong to is replaced
-  // or the product window closes — reviewing keeps referencing the same
-  // previews the whole time, so revoking on every render would break them.
+  useEffect(() => {
+    imagesRef.current = images;
+  }, [images]);
+
+  // The cleanup must see the latest list without revoking URLs after each
+  // image-list update (which would break the active previews).
   useEffect(() => () => {
-    images.forEach(image => URL.revokeObjectURL(image.previewUrl));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    imagesRef.current.forEach(image => URL.revokeObjectURL(image.previewUrl));
   }, []);
 
   const replaceImages = useCallback((nextFiles: File[]) => {
@@ -159,6 +164,7 @@ export default function TiniOcrApp() {
         images.map(image => image.file),
         {
           preset,
+          language: ocrLanguage,
           signal: controller.signal,
           onJobStatus: job => {
             setJobProgress(job.progress);
@@ -178,7 +184,7 @@ export default function TiniOcrApp() {
     } finally {
       abortControllerRef.current = null;
     }
-  }, [images, preset, addToast]);
+  }, [images, preset, ocrLanguage, addToast]);
 
   const handleCancelRecognition = useCallback(() => {
     abortControllerRef.current?.abort();
@@ -242,6 +248,8 @@ export default function TiniOcrApp() {
         isBackendReady={isBackendReady}
         preset={preset}
         onPresetChange={setPreset}
+        ocrLanguage={ocrLanguage}
+        onOcrLanguageChange={setOcrLanguage}
         onFilesSelected={handleFiles}
         onMoveImage={moveImage}
         onRemoveImage={removeImage}

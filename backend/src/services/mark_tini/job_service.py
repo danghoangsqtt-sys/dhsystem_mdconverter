@@ -7,6 +7,7 @@ import logging
 import os
 import shutil
 import threading
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -46,6 +47,13 @@ STATUS_MESSAGES: dict[JobStatus, str] = {
     "cancelled": "Đã hủy chuyển đổi.",
     "error": "Chuyển đổi thất bại.",
 }
+
+# Terminal statuses - jobs in these states are candidates for pruning
+TERMINAL_STATUSES: frozenset[JobStatus] = frozenset(
+    {"complete", "cancelled", "error"}
+)
+# How long to keep terminal jobs in memory before pruning (seconds)
+TERMINAL_JOB_TTL_SECONDS = 3600  # 1 hour
 
 
 def _utc_now() -> str:
@@ -156,10 +164,13 @@ class ConversionJobManager:
         self._jobs: dict[str, ConversionJob] = {}
         self._queue: asyncio.Queue[str] = asyncio.Queue()
         self._worker_task: asyncio.Task[None] | None = None
+        self._prune_task: asyncio.Task[None] | None = None
 
     async def start(self) -> None:
         if self._worker_task is None or self._worker_task.done():
             self._worker_task = asyncio.create_task(self._worker(), name="documark-conversion-worker")
+        if self._prune_task is None or self._prune_task.done():
+            self._prune_task = asyncio.create_task(self._prune_loop(), name="documark-job-pruner")
 
     async def stop(self) -> None:
         if self._worker_task is None:
@@ -170,6 +181,13 @@ class ConversionJobManager:
         except asyncio.CancelledError:
             pass
         self._worker_task = None
+        if self._prune_task is not None:
+            self._prune_task.cancel()
+            try:
+                await self._prune_task
+            except asyncio.CancelledError:
+                pass
+            self._prune_task = None
 
     async def submit(
         self,
@@ -327,6 +345,19 @@ class ConversionJobManager:
         finally:
             self._remove_upload(job)
             job.done.set()
+            # Prune terminal jobs after each completion to prevent memory leak
+            self._prune_job_records()
+
+    async def _prune_loop(self) -> None:
+        """Background task to periodically prune old terminal jobs."""
+        while True:
+            try:
+                await asyncio.sleep(300)  # Run every 5 minutes
+                self._prune_job_records()
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                logger.exception("Error in job pruning loop")
 
     def _remove_upload(self, job: ConversionJob) -> None:
         try:
@@ -345,14 +376,43 @@ class ConversionJobManager:
                     logger.warning("Failed to remove original for job %s: %s", job_id, exc)
 
     def _prune_job_records(self, *, target_count: int | None = None) -> None:
+        """Remove old terminal jobs to prevent memory leak.
+
+        Removes jobs that are in terminal state AND either:
+        - Older than TERMINAL_JOB_TTL_SECONDS
+        - Beyond max_job_records limit (oldest first)
+        """
+        now = time.time()
+        to_remove: list[str] = []
+
+        # First pass: find jobs past TTL
+        for job_id, job in self._jobs.items():
+            if job.status not in TERMINAL_STATUSES:
+                continue
+            try:
+                updated = datetime.fromisoformat(job.updated_at.replace('Z', '+00:00')).timestamp()
+            except Exception:
+                continue
+            if now - updated > TERMINAL_JOB_TTL_SECONDS:
+                to_remove.append(job_id)
+
+        # Remove TTL-expired jobs
+        for job_id in to_remove:
+            self._jobs.pop(job_id, None)
+
+        # Second pass: enforce max_job_records limit
         target = self._max_job_records if target_count is None else max(0, target_count)
         if len(self._jobs) <= target:
             return
+
+        # Get terminal jobs sorted by updated_at (oldest first)
         completed = [
             job
             for job in self._jobs.values()
-            if job.status in {"complete", "cancelled", "error"}
+            if job.status in TERMINAL_STATUSES
         ]
         completed.sort(key=lambda item: item.updated_at)
-        for job in completed[: max(0, len(self._jobs) - target)]:
+
+        excess = len(self._jobs) - target
+        for job in completed[:excess]:
             self._jobs.pop(job.job_id, None)

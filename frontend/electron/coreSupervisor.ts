@@ -10,52 +10,15 @@ const START_POLL_MS = 250;
 const LEASE_INTERVAL_MS = 5_000;
 const LEASE_STALE_MS = 20_000;
 
-type CoreDescriptor = {
-  version: 1;
-  instanceId: string;
-  pid: number;
-  port: number;
-  token: string;
-  dataDir: string;
-  startedAt: string;
-};
-
-type ClientLease = {
-  version: 1;
-  clientId: string;
-  pid: number;
-  productId: string;
-  heartbeatAt: number;
-};
-
-export type CoreSession = {
-  instanceId: string;
-  pid: number;
-  port: number;
-  token: string;
-  dataDir: string;
-};
-
-export type CoreSupervisorOptions = {
-  appDataDir: string;
-  legacyUserDataDir: string;
-  projectRoot: string;
-  productId: string;
-  packaged: boolean;
-  log?: (...args: unknown[]) => void;
-};
-
-function delay(milliseconds: number) {
-  return new Promise(resolve => setTimeout(resolve, milliseconds));
-}
-
-function isProcessAlive(pid: number): boolean {
-  if (!Number.isSafeInteger(pid) || pid <= 0) return false;
+// Clean up any stale startup lock on module load (e.g., from a previous crash)
+function cleanupStaleLockOnStartup(lockPath: string) {
   try {
-    process.kill(pid, 0);
-    return true;
+    const lock = readJson<{ pid: number; createdAt: number }>(lockPath);
+    if (!lock || (!isProcessAlive(lock.pid) && Date.now() - Number(lock.createdAt || 0) > 1_000)) {
+      fs.unlinkSync(lockPath);
+    }
   } catch {
-    return false;
+    // Ignore - file may not exist or be unreadable
   }
 }
 
@@ -131,6 +94,8 @@ export class TiniCoreSupervisor {
     this.lockPath = path.join(this.coreRoot, 'startup.lock');
     this.dataDir = path.join(this.suiteRoot, 'data');
     this.leasePath = path.join(this.clientsDir, `${this.clientId}.json`);
+    // Clean up any stale lock file from a previous crash
+    cleanupStaleLockOnStartup(this.lockPath);
   }
 
   async connect(): Promise<CoreSession> {
@@ -181,7 +146,12 @@ export class TiniCoreSupervisor {
         try {
           const rechecked = readJson<CoreDescriptor>(this.descriptorPath);
           if (rechecked && await this.isHealthy(rechecked)) return rechecked;
-          if (rechecked && !isProcessAlive(rechecked.pid)) {
+          if (rechecked) {
+            // Unhealthy but still occupying CORE_PORT (e.g. a version
+            // mismatch left over from a previous install) — stopProcess
+            // no-ops if it already died, so this is safe either way, and
+            // it guarantees startCore() below gets the port free.
+            this.stopProcess(rechecked.pid);
             try { fs.unlinkSync(this.descriptorPath); } catch { /* stale */ }
           }
           return await this.startCore();
@@ -280,6 +250,7 @@ export class TiniCoreSupervisor {
       token,
       dataDir: this.dataDir,
       startedAt: new Date().toISOString(),
+      appVersion: this.options.appVersion,
     };
     writeJsonAtomic(this.descriptorPath, descriptor);
     const attached = await this.waitForDescriptor(START_TIMEOUT_MS);
@@ -308,6 +279,11 @@ export class TiniCoreSupervisor {
             return;
           }
           if (this.disposed) return;
+          // this.session is unhealthy (process died, or is alive but wedged
+          // and not answering /api/health) — stop it before restarting so
+          // the replacement isn't left trying to bind an already-occupied
+          // CORE_PORT. stopProcess no-ops if it's already dead.
+          this.stopProcess(this.session.pid);
           this.session = await this.startCore(this.session);
         } finally {
           fs.closeSync(lockHandle);
@@ -335,6 +311,12 @@ export class TiniCoreSupervisor {
 
   private async isHealthy(descriptor: CoreDescriptor): Promise<boolean> {
     if (descriptor.version !== 1 || descriptor.port !== CORE_PORT || !descriptor.token) return false;
+    // A descriptor left behind by a different install (upgrade/downgrade,
+    // or a stale one predating this field) must never be reattached to —
+    // it may be running stale code, a stale data migration, or simply be a
+    // leaked process an installer failed to terminate. Treat any version
+    // mismatch as unhealthy so the caller starts a fresh Core instead.
+    if (descriptor.appVersion !== this.options.appVersion) return false;
     if (!isProcessAlive(descriptor.pid)) return false;
     try {
       const response = await fetch(`http://127.0.0.1:${descriptor.port}/api/health`, {

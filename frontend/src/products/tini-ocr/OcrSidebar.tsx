@@ -10,7 +10,7 @@ import {
   X,
 } from 'lucide-react';
 import { productStorageKey } from '../../shared/product';
-import type { ImageOcrPreset } from './api';
+import type { ImageOcrPreset, OcrLanguage } from './api';
 import type { ImageItem, Stage } from './TiniOcrApp';
 
 const MIN_WIDTH = 200;
@@ -33,6 +33,12 @@ const PRESET_OPTIONS: { value: ImageOcrPreset; label: string; hint: string }[] =
   { value: 'high_contrast', label: 'Tương phản cao', hint: 'Phù hợp ảnh mờ, thiếu sáng hoặc ám vàng' },
 ];
 
+const LANGUAGE_OPTIONS: { value: OcrLanguage; label: string; hint: string }[] = [
+  { value: 'vi_en', label: 'Việt + Anh', hint: 'Tài liệu song ngữ Việt - Anh (mặc định)' },
+  { value: 'vi', label: 'Chỉ Việt', hint: 'Tối ưu cho tài liệu thuần tiếng Việt' },
+  { value: 'en', label: 'Chỉ Anh', hint: 'Tối ưu cho tài liệu thuần tiếng Anh' },
+];
+
 function formatFileSize(bytes: number) {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -45,6 +51,8 @@ interface OcrSidebarProps {
   isBackendReady: boolean;
   preset: ImageOcrPreset;
   onPresetChange: (preset: ImageOcrPreset) => void;
+  ocrLanguage: OcrLanguage;
+  onOcrLanguageChange: (language: OcrLanguage) => void;
   onFilesSelected: (files: FileList | null) => void;
   onMoveImage: (index: number, direction: -1 | 1) => void;
   onRemoveImage: (id: string) => void;
@@ -57,6 +65,8 @@ export default function OcrSidebar({
   isBackendReady,
   preset,
   onPresetChange,
+  ocrLanguage,
+  onOcrLanguageChange,
   onFilesSelected,
   onMoveImage,
   onRemoveImage,
@@ -237,6 +247,36 @@ export default function OcrSidebar({
                       value={option.value}
                       checked={preset === option.value}
                       onChange={() => onPresetChange(option.value)}
+                      className="sr-only"
+                    />
+                    {option.label}
+                  </span>
+                  <span className="text-[10px] text-gray-500 leading-tight">{option.hint}</span>
+                </label>
+              ))}
+            </fieldset>
+          </div>
+
+          <div className="px-2 pt-2 flex-shrink-0">
+            <div className="px-2 py-1 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+              Ngôn ngữ nhận dạng
+            </div>
+            <fieldset disabled={listLocked} className="px-2 pb-2 space-y-1.5">
+              {LANGUAGE_OPTIONS.map(option => (
+                <label
+                  key={option.value}
+                  className={`flex flex-col gap-0.5 px-2.5 py-1.5 rounded-md border transition-colors
+                    ${ocrLanguage === option.value ? 'border-blue-200 bg-blue-50' : 'border-gray-200 bg-white hover:bg-gray-50'}
+                    ${listLocked ? 'cursor-not-allowed opacity-55' : 'cursor-pointer'}
+                  `}
+                >
+                  <span className="flex items-center gap-1.5 text-xs font-semibold text-gray-800">
+                    <input
+                      type="radio"
+                      name="ocr-language"
+                      value={option.value}
+                      checked={ocrLanguage === option.value}
+                      onChange={() => onOcrLanguageChange(option.value)}
                       className="sr-only"
                     />
                     {option.label}

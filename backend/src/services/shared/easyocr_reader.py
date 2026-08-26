@@ -19,7 +19,7 @@ OCR_LANG_PRESETS: dict[str, list[str]] = {
 DEFAULT_OCR_LANG = "vi_en"
 
 _region_reader_cache: dict[str, Any] = {}
-_region_reader_lock = threading.Lock()
+_region_reader_lock = threading.RLock()
 
 
 def get_region_reader(lang_key: str = DEFAULT_OCR_LANG) -> Any:
@@ -46,3 +46,20 @@ def get_region_reader(lang_key: str = DEFAULT_OCR_LANG) -> Any:
         )
         _region_reader_cache[lang_key] = reader
         return reader
+
+
+def clear_region_reader_cache() -> None:
+    """Clear all cached EasyOCR readers to free memory.
+
+    Call this when the application is shutting down or when
+    switching between different model configurations.
+    """
+    global _region_reader_cache
+    with _region_reader_lock:
+        _region_reader_cache.clear()
+
+
+def get_cached_languages() -> list[str]:
+    """Return list of languages currently cached in memory."""
+    with _region_reader_lock:
+        return list(_region_reader_cache.keys())

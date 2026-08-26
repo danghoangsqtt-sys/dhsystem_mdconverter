@@ -19,7 +19,8 @@ from ...uploads import (
     _validate_uploaded_content,
 )
 from . import ocr_export_service
-from .image_ocr_service import DEFAULT_IMAGE_OCR_ENGINE, SUPPORTED_IMAGE_OCR_ENGINES
+from .image_ocr_service import DEFAULT_IMAGE_OCR_ENGINE, SUPPORTED_IMAGE_OCR_ENGINES, DEFAULT_OCR_LANG
+from ..shared.easyocr_reader import OCR_LANG_PRESETS
 from .ocr_job_service import (
     OcrInput,
     OcrJobCapacityError,
@@ -88,14 +89,17 @@ async def create_ocr_job(
     files: list[UploadFile] = File(...),
     preset: str = Form("balanced"),
     engine: str = Form(DEFAULT_IMAGE_OCR_ENGINE),
+    language: str = Form(DEFAULT_OCR_LANG),
 ) -> dict[str, object]:
     if preset not in {"original", "balanced", "high_contrast"}:
         raise HTTPException(status_code=400, detail="Preset xử lý ảnh không hợp lệ.")
     if engine not in SUPPORTED_IMAGE_OCR_ENGINES:
         raise HTTPException(status_code=400, detail="Engine OCR không hợp lệ.")
+    if language not in OCR_LANG_PRESETS:
+        raise HTTPException(status_code=400, detail="Ngôn ngữ OCR không hợp lệ.")
     inputs = await _persist_ocr_uploads(files)
     try:
-        return ocr_job_manager.create(inputs, preset=preset, engine=engine).public_state()
+        return ocr_job_manager.create(inputs, preset=preset, engine=engine, language=language).public_state()
     except OcrJobCapacityError as exc:
         for item in inputs:
             item.path.unlink(missing_ok=True)

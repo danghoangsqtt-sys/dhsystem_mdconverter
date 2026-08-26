@@ -187,6 +187,7 @@ export const PdfViewerBox: React.FC<PdfViewerBoxProps> = ({ file, onExtractRegio
   // Walks every page that has a drawn box, one at a time (only one page can
   // be rasterized to the canvas at once), cropping as it goes, then restores
   // whatever page the user was originally looking at.
+  // Processes sequentially to avoid OOM on large PDFs with many crops.
   const handleExtractAll = async () => {
     if (pagesWithBoxes.length < 2 || !onExtractRegions || isExtracting) return;
     setIsExtracting(true);
@@ -198,8 +199,11 @@ export const PdfViewerBox: React.FC<PdfViewerBoxProps> = ({ file, onExtractRegio
         setExtractAllProgress({ current: i + 1, total: pagesWithBoxes.length });
         await waitForPageRender(page);
         const pageBoxes = boxes.filter(b => b.page === page);
-        const blobs = await Promise.all(pageBoxes.map(cropBoxToBlob));
-        allBlobs.push(...blobs.filter((b): b is Blob => b !== null));
+        // Process crops sequentially to limit memory usage
+        for (const box of pageBoxes) {
+          const blob = await cropBoxToBlob(box);
+          if (blob) allBlobs.push(blob);
+        }
       }
       await onExtractRegions(allBlobs);
       setBoxes([]);

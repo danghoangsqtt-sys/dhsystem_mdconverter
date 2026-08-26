@@ -56,11 +56,11 @@ class OcrJobServiceTests(unittest.TestCase):
         self.fail(f"job {job.job_id} did not reach {statuses} in time (last status: {current.status})")
 
     def test_job_recognizes_all_pages_and_completes(self) -> None:
-        def fake_recognize(path, *, filename, index, preset, engine):
+        def fake_recognize(path, *, filename, index, preset, engine, lang=None):
             return _fake_page(index, filename, engine, text="hello")
 
         with patch("backend.src.services.tini_ocr.ocr_job_service.recognize_image", side_effect=fake_recognize):
-            job = self.manager.create([self.make_input("a.png")], preset="balanced", engine="easyocr")
+            job = self.manager.create([self.make_input("a.png")], preset="balanced", engine="easyocr", language="vi_en")
             done = self.wait_for(self.manager, job, {"complete", "error"})
 
         self.assertEqual(done.status, "complete")
@@ -69,7 +69,7 @@ class OcrJobServiceTests(unittest.TestCase):
         self.assertEqual(result["pages"][0]["text"], "hello")
 
     def test_one_bad_page_does_not_hide_other_results(self) -> None:
-        def fake_recognize(path, *, filename, index, preset, engine):
+        def fake_recognize(path, *, filename, index, preset, engine, lang=None):
             if index == 1:
                 raise RuntimeError("boom")
             return _fake_page(index, filename, engine, text="ok")
@@ -79,6 +79,7 @@ class OcrJobServiceTests(unittest.TestCase):
                 [self.make_input("a.png"), self.make_input("b.png")],
                 preset="balanced",
                 engine="easyocr",
+                language="vi_en",
             )
             done = self.wait_for(self.manager, job, {"complete", "error"})
 
@@ -91,12 +92,12 @@ class OcrJobServiceTests(unittest.TestCase):
     def test_result_not_ready_before_completion(self) -> None:
         gate = threading.Event()
 
-        def blocked_recognize(path, *, filename, index, preset, engine):
+        def blocked_recognize(path, *, filename, index, preset, engine, lang=None):
             gate.wait(timeout=2)
             return _fake_page(index, filename, engine)
 
         with patch("backend.src.services.tini_ocr.ocr_job_service.recognize_image", side_effect=blocked_recognize):
-            job = self.manager.create([self.make_input("a.png")], preset="balanced", engine="easyocr")
+            job = self.manager.create([self.make_input("a.png")], preset="balanced", engine="easyocr", language="vi_en")
             try:
                 with self.assertRaises(OcrResultNotReadyError):
                     self.manager.result(job.job_id)
@@ -112,7 +113,7 @@ class OcrJobServiceTests(unittest.TestCase):
         started = threading.Event()
         gate = threading.Event()
 
-        def blocked_recognize(path, *, filename, index, preset, engine):
+        def blocked_recognize(path, *, filename, index, preset, engine, lang=None):
             started.set()
             gate.wait(timeout=2)
             return _fake_page(index, filename, engine)
@@ -122,6 +123,7 @@ class OcrJobServiceTests(unittest.TestCase):
                 [self.make_input("a.png"), self.make_input("b.png")],
                 preset="balanced",
                 engine="easyocr",
+                language="vi_en",
             )
             started.wait(timeout=2)
             self.manager.cancel(job.job_id)
@@ -137,7 +139,7 @@ class OcrJobServiceTests(unittest.TestCase):
 
         with patch("backend.src.services.tini_ocr.ocr_job_service.recognize_image", side_effect=fake_recognize):
             input_ = self.make_input("a.png")
-            job = self.manager.create([input_], preset="balanced", engine="easyocr")
+            job = self.manager.create([input_], preset="balanced", engine="easyocr", language="vi_en")
             self.wait_for(self.manager, job, {"complete"})
 
         deadline = time.monotonic() + 2.0
@@ -148,22 +150,22 @@ class OcrJobServiceTests(unittest.TestCase):
     def test_active_job_capacity_is_bounded(self) -> None:
         gate = threading.Event()
 
-        def blocked_recognize(path, *, filename, index, preset, engine):
+        def blocked_recognize(path, *, filename, index, preset, engine, lang=None):
             gate.wait(timeout=2)
             return _fake_page(index, filename, engine)
 
         manager = OcrJobManager(max_records=100, max_active_jobs=1)
         with patch("backend.src.services.tini_ocr.ocr_job_service.recognize_image", side_effect=blocked_recognize):
-            first = manager.create([self.make_input("a.png")], preset="balanced", engine="easyocr")
+            first = manager.create([self.make_input("a.png")], preset="balanced", engine="easyocr", language="vi_en")
             try:
                 with self.assertRaises(OcrJobCapacityError):
-                    manager.create([self.make_input("b.png")], preset="balanced", engine="easyocr")
+                    manager.create([self.make_input("b.png")], preset="balanced", engine="easyocr", language="vi_en")
             finally:
                 gate.set()
             self.wait_for(manager, first, {"complete"})
 
             # capacity frees up once the in-flight job reaches a terminal state
-            third = manager.create([self.make_input("c.png")], preset="balanced", engine="easyocr")
+            third = manager.create([self.make_input("c.png")], preset="balanced", engine="easyocr", language="vi_en")
             self.wait_for(manager, third, {"complete"})
 
     def test_trim_removes_oldest_completed_records_beyond_max_records(self) -> None:
@@ -172,9 +174,9 @@ class OcrJobServiceTests(unittest.TestCase):
 
         manager = OcrJobManager(max_records=1, max_active_jobs=10)
         with patch("backend.src.services.tini_ocr.ocr_job_service.recognize_image", side_effect=fake_recognize):
-            first = manager.create([self.make_input("a.png")], preset="balanced", engine="easyocr")
+            first = manager.create([self.make_input("a.png")], preset="balanced", engine="easyocr", language="vi_en")
             self.wait_for(manager, first, {"complete"})
-            second = manager.create([self.make_input("b.png")], preset="balanced", engine="easyocr")
+            second = manager.create([self.make_input("b.png")], preset="balanced", engine="easyocr", language="vi_en")
             self.wait_for(manager, second, {"complete"})
 
         with self.assertRaises(OcrJobNotFoundError):

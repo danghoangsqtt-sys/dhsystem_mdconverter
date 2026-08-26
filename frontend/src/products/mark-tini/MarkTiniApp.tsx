@@ -21,7 +21,8 @@ import {
 } from './api';
 import type { OcrLang, TableMode, HistoryEntry, ConversionJobState, TranslationDirection, TranslationDomain } from './api';
 import { checkBackendHealth, ConversionCancelledError } from '../../shared/api';
-import { loadAutosave, saveAutosave } from './autosaveDb';
+import { useAutosave } from './hooks/useAutosave';
+import { useUploadDeduplication } from './hooks/useUploadDeduplication';
 import { extractSourceFileMetadata } from './markdownMetadata';
 import type { ProcessingState, ExtractionResult, CitationVerificationEntry, TranslationEntry, SourceFileMetadata } from './types';
 import type { ToastMessage } from '../../shared/types';
@@ -296,13 +297,19 @@ const MarkTiniApp: React.FC = () => {
     };
   }, [addToast]);
 
+  // Autosave hook
+  const { load: loadAutosaveRecord, save: saveAutosaveRecord } = useAutosave();
+  // Upload deduplication
+  const { executeWithDedup: executeUploadWithDedup } = useUploadDeduplication();
+
+  // Load autosave on mount
   useEffect(() => {
     let cancelled = false;
 
     const load = async () => {
-      let saved: Awaited<ReturnType<typeof loadAutosave>> = null;
+      let saved = null;
       try {
-        saved = await loadAutosave();
+        saved = await loadAutosaveRecord();
       } catch {
         if (!cancelled) addToast('info', 'Không thể đọc bản tự lưu của trình duyệt.');
       }
@@ -324,7 +331,7 @@ const MarkTiniApp: React.FC = () => {
 
     load();
     return () => { cancelled = true; };
-  }, [addToast]);
+  }, [addToast, loadAutosaveRecord]);
 
   useEffect(() => {
     const handleSelectionChange = () => {
@@ -334,20 +341,10 @@ const MarkTiniApp: React.FC = () => {
     return () => document.removeEventListener('selectionchange', handleSelectionChange);
   }, []);
 
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      saveAutosave({ content: state.content, fileName: state.fileName })
-        .then(() => dispatch({ type: 'SET_SAVE_STATUS', payload: 'saved' }))
-        .catch(() => {
-          addToast('info', 'Không thể lưu bản tự động; hãy tải file Markdown xuống để tránh mất dữ liệu.');
-        });
-    }, 1000);
-    return () => clearTimeout(timeoutId);
-  }, [state.content, state.fileName, addToast]);
-
   const handleContentChange = useCallback((newContent: string) => {
     dispatch({ type: 'SET_CONTENT', payload: newContent });
-  }, []);
+    saveAutosaveRecord(newContent, state.fileName);
+  }, [saveAutosaveRecord, state.fileName]);
 
   const syncJobState = useCallback((job: ConversionJobState, requestId: number, batchContext?: BatchFileContext) => {
     if (activeRequestIdRef.current !== requestId) return;
@@ -376,59 +373,62 @@ const MarkTiniApp: React.FC = () => {
   }, []);
 
   const handleFileUpload = useCallback(async (file: File, batchContext?: BatchFileContext): Promise<boolean> => {
-    const requestId = ++activeRequestIdRef.current;
-    const uploadController = new AbortController();
-    activeUploadControllerRef.current = uploadController;
-    activeJobIdRef.current = null;
+    // Use deduplication to prevent double uploads
+    return executeUploadWithDedup(file, async (signal: AbortSignal) => {
+      const requestId = ++activeRequestIdRef.current;
+      activeUploadControllerRef.current = new AbortController();
+      // Link external signal to internal controller
+      const linkedController = AbortSignal.any([signal, activeUploadControllerRef.current.signal]);
+      activeJobIdRef.current = null;
 
-    // Shown immediately (not gated on conversion finishing) so the user can
-    // start browsing pages / drawing extraction boxes right away. Only PDFs
-    // get the side-by-side viewer — react-pdf can't render DOCX/PPTX/HTML.
-    setSourceFile(file.name.toLowerCase().endsWith('.pdf') ? file : null);
-    setExtractionResults([]);
-    setCitationResults([]);
-    setTranslationResults([]);
-    sourceHistoryJobIdRef.current = null;
-    const batchLabel = batchFileLabel(batchContext);
+      // Shown immediately (not gated on conversion finishing) so the user can
+      // start browsing pages / drawing extraction boxes right away. Only PDFs
+      // get the side-by-side viewer — react-pdf can't render DOCX/PPTX/HTML.
+      setSourceFile(file.name.toLowerCase().endsWith('.pdf') ? file : null);
+      setExtractionResults([]);
+      setCitationResults([]);
+      setTranslationResults([]);
+      sourceHistoryJobIdRef.current = null;
+      const batchLabel = batchFileLabel(batchContext);
 
-    dispatch({
-      type: 'SET_PROCESSING_STATE',
-      payload: {
-        isProcessing: true,
-        stage: 'uploading',
-        message: batchLabel ? `${batchLabel} — Đang tải file lên backend...` : 'Đang tải file lên backend...',
-        logs: batchLabel
-          ? [`Tệp trong hàng đợi: ${batchLabel}`, 'Đang kiểm tra định dạng và kích thước file.']
-          : ['Đang kiểm tra định dạng và kích thước file.'],
-        error: null,
-        success: false,
-        uploadProgress: 0,
-        progress: 0,
-        jobId: null,
-      }
-    });
-
-    const newFileName = file.name.replace(/\.[^/.]+$/, ".md");
-    dispatch({ type: 'SET_FILE_NAME', payload: newFileName });
-
-    try {
-      const response = await uploadAndConvertFile(file, {
-        lang: ocrLang,
-        tableMode,
-        signal: uploadController.signal,
-        onUploadProgress: (progress) => {
-          if (activeRequestIdRef.current !== requestId) return;
-          dispatch({
-            type: 'SET_PROCESSING_STATE',
-            payload: {
-              uploadProgress: progress,
-              message: `${batchLabel ? `${batchLabel} — ` : ''}Đang tải file lên server... ${progress}%`
-            }
-          });
-        },
-        onJobCreated: job => syncJobState(job, requestId, batchContext),
-        onJobStatus: job => syncJobState(job, requestId, batchContext),
+      dispatch({
+        type: 'SET_PROCESSING_STATE',
+        payload: {
+          isProcessing: true,
+          stage: 'uploading',
+          message: batchLabel ? `${batchLabel} — Đang tải file lên backend...` : 'Đang tải file lên backend...',
+          logs: batchLabel
+            ? [`Tệp trong hàng đợi: ${batchLabel}`, 'Đang kiểm tra định dạng và kích thước file.']
+            : ['Đang kiểm tra định dạng và kích thước file.'],
+          error: null,
+          success: false,
+          uploadProgress: 0,
+          progress: 0,
+          jobId: null,
+        }
       });
+
+      const newFileName = file.name.replace(/\.[^/.]+$/, ".md");
+      dispatch({ type: 'SET_FILE_NAME', payload: newFileName });
+
+      try {
+        const response = await uploadAndConvertFile(file, {
+          lang: ocrLang,
+          tableMode,
+          signal: linkedController,
+          onUploadProgress: (progress) => {
+            if (activeRequestIdRef.current !== requestId) return;
+            dispatch({
+              type: 'SET_PROCESSING_STATE',
+              payload: {
+                uploadProgress: progress,
+                message: `${batchLabel ? `${batchLabel} — ` : ''}Đang tải file lên server... ${progress}%`
+              }
+            });
+          },
+          onJobCreated: job => syncJobState(job, requestId, batchContext),
+          onJobStatus: job => syncJobState(job, requestId, batchContext),
+        });
 
       if (activeRequestIdRef.current !== requestId) {
         // Superseded by a newer upload / opened file / new document while
@@ -467,7 +467,7 @@ const MarkTiniApp: React.FC = () => {
 
       activeJobIdRef.current = null;
       activeUploadControllerRef.current = null;
-      const wasCancelled = err instanceof ConversionCancelledError || uploadController.signal.aborted;
+      const wasCancelled = err instanceof ConversionCancelledError || linkedController.aborted;
       let errorMessage = 'Có lỗi xảy ra khi xử lý tài liệu.';
       if (err instanceof Error && err.message) errorMessage = err.message;
 
@@ -489,7 +489,8 @@ const MarkTiniApp: React.FC = () => {
       }
       return false;
     }
-  }, [addToast, ocrLang, tableMode, refreshHistory, syncJobState]);
+    });
+  }, [addToast, executeUploadWithDedup, ocrLang, tableMode, refreshHistory, syncJobState]);
 
   const handleCancelProcessing = useCallback(async () => {
     batchCancelledRef.current = true;
