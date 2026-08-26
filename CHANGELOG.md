@@ -3,11 +3,17 @@ Tất cả các thay đổi của dự án sẽ được cập nhật tại đâ
 
 ## [Unreleased]
 
+## [1.6.1] — 2026-08-26
+
 ### Removed
 - **DOCX giống PDF (dạng ảnh):** Bỏ hẳn chế độ xuất Word bằng cách render từng trang PDF thành ảnh toàn trang (`pdf_to_word_service.py` và route `/export/pdf-to-word-faithful`); không sửa chữ được và không còn cần thiết sau khi DOCX chỉnh sửa hỗ trợ đầy đủ hình ảnh/sơ đồ thật (xem mục Changed).
 
 ### Changed
 - **DOCX chỉnh sửa:** Docling giờ giữ lại bitmap của mọi hình ảnh/sơ đồ khối trong PDF (`generate_picture_images`) và nhúng thật (base64) vào Markdown xuất ra thay vì để lại comment placeholder `<!-- image -->`. DOCX chỉnh sửa dựng các ảnh này thành ảnh Word thật, tự co theo chiều rộng trang và được căn giữa. Sidebar chỉ còn một nút xuất Word duy nhất, đổi nhãn thành **"Xuất Word"**.
+
+### Fixed
+- **DOCX chỉnh sửa — đáp án trắc nghiệm biến thành Numbering:** `markdown_to_word_service.py` dựng danh sách bằng style "List Number"/"List Bullet" dựng sẵn của python-docx, dùng chung một bộ đếm numbering của Word cho toàn bộ tài liệu; với tài liệu hàng trăm câu hỏi, đáp án câu sau cứ đếm tiếp từ câu trước (vd. 862, 863, 864...) thay vì quay về 1/2/3 hay A/B/C/D cho từng câu. Marker mỗi mục danh sách giờ được viết thành text thường theo từng danh sách riêng (không còn `w:numPr` tham chiếu numbering dùng chung), nên mỗi câu hỏi luôn tự bắt đầu lại.
+- **DOCX chỉnh sửa — công thức toán học bị sai/mất:** Docling xuất công thức đã nhận dạng dưới dạng LaTeX thô (`$...$`/`$$...$$`) trong Markdown; bộ phân tích Markdown trước đó không biết gì về cú pháp này nên hiểu nhầm `_`/`*` bên trong công thức thành in nghiêng/đậm, làm sai hoặc mất một phần nội dung. Công thức giờ được tách ra trước khi phân tích Markdown nên giữ nguyên y hệt LaTeX gốc trong DOCX, hiển thị bằng font/màu riêng để dễ phân biệt với văn bản thường (chưa phải công thức Word dựng sẵn có thể bấm sửa từng ký hiệu — xem trao đổi thêm về hướng nâng cấp OMML/KaTeX).
 
 ## [1.6.0] — 2026-08-21
 

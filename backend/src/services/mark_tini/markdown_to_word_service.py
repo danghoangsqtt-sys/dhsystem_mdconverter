@@ -11,6 +11,7 @@ from __future__ import annotations
 import base64
 import binascii
 import io
+import re
 from pathlib import Path
 from typing import Iterable, Sequence
 
@@ -18,13 +19,75 @@ from docx import Document
 from docx.document import Document as DocumentType
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.shared import Pt
+from docx.shared import Pt, RGBColor
 from markdown_it import MarkdownIt
 from markdown_it.token import Token
 
 
 class MarkdownToWordError(RuntimeError):
     """Raised when reviewed Markdown cannot be exported to DOCX."""
+
+
+# Docling emits recognized math/physics/chemistry formulas as literal
+# `$...$` / `$$...$$` LaTeX text in the Markdown it exports (docling_core's
+# markdown serializer). CommonMark has no concept of math spans, so left
+# alone, markdown-it's emphasis/code-span rules partially reinterpret LaTeX
+# special characters (`_`, `*`, backticks) as formatting and corrupt the
+# formula. Extracting these spans into inert placeholders before parsing
+# keeps the original LaTeX byte-for-byte intact end to end.
+_BLOCK_FORMULA_RE = re.compile(r"\$\$(.+?)\$\$", re.DOTALL)
+_INLINE_FORMULA_RE = re.compile(r"(?<!\$)\$([^\n$]+?)\$(?!\$)")
+_LATEX_HINT_RE = re.compile(r"[\\^_{}]")
+_FORMULA_PLACEHOLDER_RE = re.compile(r"⟦FORMULA\d+⟧")
+_FORMULA_RUN_COLOR = RGBColor(0x5B, 0x2C, 0x8F)
+
+
+def _extract_formulas(markdown: str) -> tuple[str, dict[str, str]]:
+    formulas: dict[str, str] = {}
+
+    def _store(latex_with_delimiters: str) -> str:
+        placeholder = f"⟦FORMULA{len(formulas)}⟧"
+        formulas[placeholder] = latex_with_delimiters
+        return placeholder
+
+    def _replace_block(match: re.Match[str]) -> str:
+        return _store(match.group(0))
+
+    def _replace_inline(match: re.Match[str]) -> str:
+        if not _LATEX_HINT_RE.search(match.group(1)):
+            # Bare "$50" style currency mentions carry no LaTeX markup;
+            # leave them as plain text instead of risking a false positive
+            # that would visually flag them as a formula.
+            return match.group(0)
+        return _store(match.group(0))
+
+    text = _BLOCK_FORMULA_RE.sub(_replace_block, markdown)
+    text = _INLINE_FORMULA_RE.sub(_replace_inline, text)
+    return text, formulas
+
+
+def _restore_formula_placeholders(text: str, formulas: dict[str, str]) -> str:
+    if not formulas or "⟦" not in text:
+        return text
+    return _FORMULA_PLACEHOLDER_RE.sub(lambda m: formulas.get(m.group(0), m.group(0)), text)
+
+
+def _split_formula_runs(text: str, formulas: dict[str, str]) -> list[tuple[str, bool]]:
+    if not formulas or "⟦" not in text:
+        return [(text, False)]
+    parts: list[tuple[str, bool]] = []
+    last_end = 0
+    for match in _FORMULA_PLACEHOLDER_RE.finditer(text):
+        placeholder = match.group(0)
+        if placeholder not in formulas:
+            continue
+        if match.start() > last_end:
+            parts.append((text[last_end : match.start()], False))
+        parts.append((formulas[placeholder], True))
+        last_end = match.end()
+    if last_end < len(text):
+        parts.append((text[last_end:], False))
+    return parts
 
 
 def _decode_data_uri(src: str) -> io.BytesIO | None:
@@ -48,8 +111,8 @@ def _sole_image_child(inline_token: Token | None) -> Token | None:
     return None
 
 
-def _add_image_paragraph(document: DocumentType, token: Token) -> None:
-    alt_text = token.content or token.attrGet("alt") or "Hình ảnh"
+def _add_image_paragraph(document: DocumentType, token: Token, formulas: dict[str, str]) -> None:
+    alt_text = _restore_formula_placeholders(token.content or token.attrGet("alt") or "Hình ảnh", formulas)
     image_stream = _decode_data_uri(token.attrGet("src") or "")
 
     paragraph = document.add_paragraph()
@@ -75,7 +138,7 @@ def _add_image_paragraph(document: DocumentType, token: Token) -> None:
     run.italic = True
 
 
-def _plain_text(tokens: Iterable[Token]) -> str:
+def _plain_text(tokens: Iterable[Token], formulas: dict[str, str]) -> str:
     pieces: list[str] = []
     for token in tokens:
         if token.type in {"text", "code_inline"}:
@@ -84,10 +147,10 @@ def _plain_text(tokens: Iterable[Token]) -> str:
             pieces.append("\n")
         elif token.type == "image":
             pieces.append(token.content or token.attrGet("alt") or "[Hình ảnh]")
-    return "".join(pieces)
+    return _restore_formula_placeholders("".join(pieces), formulas)
 
 
-def _add_inline(paragraph, token: Token) -> None:
+def _add_inline(paragraph, token: Token, formulas: dict[str, str]) -> None:
     children = token.children or []
     bold_depth = 0
     italic_depth = 0
@@ -115,7 +178,7 @@ def _add_inline(paragraph, token: Token) -> None:
             paragraph.add_run().add_break()
             continue
         if child.type == "image":
-            text = child.content or child.attrGet("alt") or "Hình ảnh"
+            text = _restore_formula_placeholders(child.content or child.attrGet("alt") or "Hình ảnh", formulas)
             run = paragraph.add_run(f"[{text}]")
             run.italic = True
             continue
@@ -124,14 +187,24 @@ def _add_inline(paragraph, token: Token) -> None:
         text = child.content
         if link_target and link_target not in text:
             text = f"{text} ({link_target})"
-        run = paragraph.add_run(text)
-        run.bold = bold_depth > 0
-        run.italic = italic_depth > 0
-        if child.type == "code_inline":
-            run.font.name = "Consolas"
+        is_code = child.type == "code_inline"
+        for segment, is_formula in _split_formula_runs(text, formulas):
+            if not segment:
+                continue
+            run = paragraph.add_run(segment)
+            if is_formula:
+                run.font.name = "Consolas"
+                run.font.color.rgb = _FORMULA_RUN_COLOR
+            else:
+                run.bold = bold_depth > 0
+                run.italic = italic_depth > 0
+                if is_code:
+                    run.font.name = "Consolas"
 
 
-def _table_rows(tokens: Sequence[Token], start: int) -> tuple[list[list[str]], int]:
+def _table_rows(
+    tokens: Sequence[Token], start: int, formulas: dict[str, str]
+) -> tuple[list[list[str]], int]:
     rows: list[list[str]] = []
     row: list[str] | None = None
     cell_parts: list[str] | None = None
@@ -145,7 +218,7 @@ def _table_rows(tokens: Sequence[Token], start: int) -> tuple[list[list[str]], i
         elif token.type in {"th_open", "td_open"}:
             cell_parts = []
         elif token.type == "inline" and cell_parts is not None:
-            cell_parts.append(_plain_text(token.children or []))
+            cell_parts.append(_plain_text(token.children or [], formulas))
         elif token.type in {"th_close", "td_close"} and row is not None and cell_parts is not None:
             row.append("".join(cell_parts).strip())
             cell_parts = None
@@ -174,6 +247,27 @@ def _add_table(document: DocumentType, rows: Sequence[Sequence[str]]) -> None:
                     run.bold = True
 
 
+class _ListContext:
+    """Tracks one nesting level of bullet/ordered list rendering.
+
+    Word's built-in "List Number"/"List Bullet" paragraph styles all share
+    one document-wide numbering definition unless a fresh `numId` is
+    allocated per list, which python-docx's `style=` shortcut never does.
+    On a document with hundreds of independent lists (one per exam
+    question's answer choices), that made every choice count continuously
+    from the top of the document instead of restarting at each question.
+    Rendering the marker as literal, manually-computed text sidesteps
+    Word's shared numbering engine entirely so each list is self-contained.
+    """
+
+    __slots__ = ("ordered", "counter", "marker_pending")
+
+    def __init__(self, ordered: bool, start: int) -> None:
+        self.ordered = ordered
+        self.counter = start
+        self.marker_pending = False
+
+
 def convert_markdown_to_docx(
     markdown: str,
     output_path: Path,
@@ -186,6 +280,7 @@ def convert_markdown_to_docx(
         raise MarkdownToWordError("Nội dung tài liệu trống, không thể tạo DOCX chỉnh sửa được.")
 
     try:
+        markdown, formulas = _extract_formulas(markdown)
         parser = MarkdownIt("commonmark", {"html": False}).enable("table")
         tokens = parser.parse(markdown)
         document = Document()
@@ -194,39 +289,64 @@ def convert_markdown_to_docx(
         normal.font.name = "Arial"
         normal.font.size = Pt(11)
 
-        list_stack: list[str] = []
+        list_stack: list[_ListContext] = []
         index = 0
         while index < len(tokens):
             token = tokens[index]
             if token.type == "bullet_list_open":
-                list_stack.append("List Bullet")
+                list_stack.append(_ListContext(ordered=False, start=1))
             elif token.type == "ordered_list_open":
-                list_stack.append("List Number")
+                start = 1
+                if token.attrs:
+                    try:
+                        start = int(token.attrs.get("start", 1))
+                    except (TypeError, ValueError):
+                        start = 1
+                list_stack.append(_ListContext(ordered=True, start=start))
             elif token.type in {"bullet_list_close", "ordered_list_close"}:
                 if list_stack:
                     list_stack.pop()
+            elif token.type == "list_item_open":
+                if list_stack:
+                    list_stack[-1].marker_pending = True
             elif token.type == "heading_open":
                 level = min(9, max(1, int(token.tag[1:] or "1")))
                 paragraph = document.add_heading(level=level)
                 if index + 1 < len(tokens) and tokens[index + 1].type == "inline":
-                    _add_inline(paragraph, tokens[index + 1])
+                    _add_inline(paragraph, tokens[index + 1], formulas)
             elif token.type == "paragraph_open":
                 inline_token = tokens[index + 1] if index + 1 < len(tokens) and tokens[index + 1].type == "inline" else None
                 sole_image = _sole_image_child(inline_token)
                 if sole_image is not None:
-                    _add_image_paragraph(document, sole_image)
+                    _add_image_paragraph(document, sole_image, formulas)
                 else:
-                    style = list_stack[-1] if list_stack else None
-                    paragraph = document.add_paragraph(style=style)
+                    paragraph = document.add_paragraph()
+                    if list_stack:
+                        depth = len(list_stack) - 1
+                        base_indent = Pt(18 + depth * 18)
+                        ctx = list_stack[-1]
+                        if ctx.marker_pending:
+                            ctx.marker_pending = False
+                            marker_text = f"{ctx.counter}." if ctx.ordered else "•"
+                            if ctx.ordered:
+                                ctx.counter += 1
+                            paragraph.paragraph_format.left_indent = base_indent
+                            paragraph.paragraph_format.first_line_indent = Pt(-18)
+                            paragraph.paragraph_format.tab_stops.add_tab_stop(base_indent)
+                            paragraph.add_run(f"{marker_text}\t")
+                        else:
+                            # Continuation paragraph within a multi-paragraph
+                            # list item: align under the marker, no new one.
+                            paragraph.paragraph_format.left_indent = base_indent
                     if inline_token is not None:
-                        _add_inline(paragraph, inline_token)
+                        _add_inline(paragraph, inline_token, formulas)
             elif token.type in {"fence", "code_block"}:
                 paragraph = document.add_paragraph(style="No Spacing")
-                run = paragraph.add_run(token.content.rstrip("\n"))
+                run = paragraph.add_run(_restore_formula_placeholders(token.content.rstrip("\n"), formulas))
                 run.font.name = "Consolas"
                 run.font.size = Pt(9)
             elif token.type == "table_open":
-                rows, end_index = _table_rows(tokens, index + 1)
+                rows, end_index = _table_rows(tokens, index + 1, formulas)
                 _add_table(document, rows)
                 index = end_index
             elif token.type == "hr":

@@ -30,7 +30,8 @@ Dự án Tini Suite có đầy đủ tài liệu cho cả người dùng cuối 
 | Tài liệu | Nội dung | Link |
 |----------|---------|------|
 | 🏗️ **Luồng hoạt động** | Sơ đồ data flow, queue, OCR, dịch, xác minh trích dẫn | [🔄 Xem](docs/luong-hoat-dong-du-an.md) |
-| 🏛️ **Kiến trúc hệ thống** | Thiết kế hệ thống, invariant bảo mật, offline strategy | [🏛️ Xem](.viepilot/ARCHITECTURE.md) |
+| 🏛️ **Kiến trúc hệ thống** | Thiết kế hệ thống, Tini Core, invariant bảo mật, offline strategy | [🏛️ Xem](.viepilot/ARCHITECTURE.md) |
+| 🧪 **Testing / E2E** | Kiến trúc cách ly kép cho Playwright E2E test | [🧪 Xem](TESTING.md) |
 | 🔐 **Spec v1.2** | Bảo mật, reliability, offline packaging requirements | [🔐 Xem](.viepilot/phases/phase-8-reliability-security-offline/SPEC.md) |
 | 📝 **Changelog** | Lịch sử phiên bản, fix & feature mỗi release | [📜 Xem](CHANGELOG.md) |
 
@@ -38,12 +39,33 @@ Dự án Tini Suite có đầy đủ tài liệu cho cả người dùng cuối 
 
 ## 📋 Tổng quan
 
-**Tini Suite** là bộ công cụ Windows gồm hai ứng dụng riêng: **Mark Tini** chuyển PDF/DOCX/PPTX/HTML sang nội dung có cấu trúc và **Tini OCR** chuyển ảnh chụp thành text/Word. Cả hai xử lý **trên máy của bạn**, dùng chung một Tini Core và bộ model offline.
+**Tini Suite** là bộ công cụ Windows gồm hai ứng dụng riêng nhưng dùng chung một bộ cài: **Mark Tini** chuyển PDF/DOCX/PPTX/HTML sang Markdown/Word có cấu trúc, và **Tini OCR** chuyển ảnh chụp thành text/Word. Cả hai xử lý **hoàn toàn trên máy của bạn** — không upload lên cloud — và dùng chung một **Tini Core** (FastAPI backend), một runtime Python và một bộ model offline duy nhất, để không nhân đôi dung lượng cài đặt hay tài nguyên máy.
 
-Từ phiên bản **v1.2.0** trở lên, Mark Tini sử dụng:
-- **Hàng đợi backend với trạng thái thật**: Job được xử lý tuần tự, có thể hủy an toàn, không để lại dữ liệu rác
-- **Docling 2.101.0 + EasyOCR 1.7.2**: OCR tiếng Việt/Anh chính xác, nhận dạng bảng thông minh
-- **Runtime Python + model bundle**: Đóng gói sẵn, chạy offline, không cần cài đặt thêm
+| | Mark Tini | Tini OCR |
+|---|---|---|
+| **Input** | PDF, DOCX, PPTX, HTML | Ảnh chụp (PNG, JPEG, TIFF, BMP) |
+| **Output** | Markdown có cấu trúc, DOCX chỉnh sửa được | TXT, Markdown, DOCX |
+| **Engine chính** | Docling 2.101.0 (layout, bảng, formula/code) | EasyOCR 1.7.2 (Việt–Anh) |
+| **Tính năng riêng** | Dịch đoạn EN↔VI, xác minh trích dẫn, trích xuất vùng PDF | Review theo trang, hai chế độ export DOCX |
+| **Shortcut** | `Tini Suite.exe --product=mark-tini` | `Tini Suite.exe --product=tini-ocr` |
+
+Cả hai chạy trên cùng một Electron host binary. Sản phẩm khởi động trước sẽ giành quyền khởi động Tini Core; sản phẩm khởi động sau tự động gắn vào tiến trình Core đang chạy thay vì mở thêm bản backend thứ hai — xem [ARCHITECTURE.md §7.2](.viepilot/ARCHITECTURE.md#72-core-ownership) để biết chi tiết cơ chế lock/lease.
+
+## 🛠️ Tech Stack
+
+| Lớp | Công nghệ | Vai trò |
+|---|---|---|
+| **Desktop shell** | Electron 42 | Host binary dùng chung cho cả hai sản phẩm, context isolation + sandbox, preload bridge tối thiểu |
+| **Frontend** | React 19, TypeScript, Vite | UI hai sản phẩm (`frontend/src/products/mark-tini`, `frontend/src/products/tini-ocr`) trên một shared layer |
+| **Styling / Editor** | Tailwind CSS, MDEditor | Giao diện responsive, editor Markdown WYSIWYG |
+| **Backend** | Python, FastAPI, Uvicorn | Tini Core: xác thực token, hàng đợi job, orchestration |
+| **Document AI** | Docling 2.101.0 | Layout detection, table structure (TableFormer), code/formula enrichment |
+| **OCR** | EasyOCR 1.7.2 | Nhận dạng chữ Việt–Anh, dùng chung cho crop vùng (Mark Tini) và Tini OCR |
+| **Dịch máy** | VietAI/envit5-translation | Dịch đoạn EN↔VI offline, bảo toàn công thức/code |
+| **Đánh giá AI cục bộ** | Ollama (`qwen2.5:3b`, tuỳ chọn) | Đánh giá mức độ nội dung được nguồn tham khảo hỗ trợ |
+| **Packaging** | electron-builder, NSIS | Installer per-user (không cần admin), hai shortcut → một uninstall entry |
+| **Runtime offline** | Python embeddable 3.14 | Đóng gói sẵn trong installer, không phụ thuộc Python hệ thống |
+| **Testing** | Playwright, `unittest` | E2E (Electron thật, cách ly kép — xem [TESTING.md](TESTING.md)), 117 unit test backend |
 
 ## ⭐ Tính năng nổi bật
 
@@ -100,15 +122,16 @@ Từ phiên bản **v1.2.0** trở lên, Mark Tini sử dụng:
 ## Kiến trúc
 
 ```text
-Electron/React ── token + HTTP ──> FastAPI ──> single-worker queue ──> Docling
-      │                              │                                  │
-      └── editor/history <───────────┴── atomic output/history <────────┘
+Mark Tini / Tini OCR renderer ── token + HTTP ──> FastAPI (Tini Core) ──> single-worker queue ──> Docling/EasyOCR
+                │                                        │                                              │
+                │                          TiniCoreSupervisor: lock, PID+health, lease/heartbeat          │
+                └── editor/history <─────────────────────┴──────────── atomic output/history <───────────┘
 ```
 
 - Frontend: React 19, TypeScript, Vite, Tailwind, MDEditor.
-- Desktop: Electron 42, context isolation + sandbox, preload bridge tối thiểu.
+- Desktop: Electron 42, context isolation + sandbox, preload bridge tối thiểu, `frontend/electron/coreSupervisor.ts` quản lý vòng đời Tini Core.
 - Backend: FastAPI, Docling 2.101.0, EasyOCR 1.7.2.
-- Storage: development dùng `data/`; bản cài đặt dùng `app.getPath('userData')/data`.
+- Storage: development dùng `data/`; bản cài đặt dùng `<appData>/Tini Suite/data`, truyền xuống backend qua `DOCUMARK_DATA_DIR`.
 
 Thiết kế chi tiết và các invariant nằm tại [ARCHITECTURE.md](.viepilot/ARCHITECTURE.md) và [SPEC v1.2](.viepilot/phases/phase-8-reliability-security-offline/SPEC.md).
 
@@ -188,11 +211,25 @@ cd frontend
 npm run build:electron
 ```
 
-Quy trình build tự động:
-1. Tạo runtime Python embeddable nếu chưa có
-2. Tải model Docling/EasyOCR/translation vào `offline_models/`
-3. Validate dependency lock (`requirements.lock.txt`)
-4. Build NSIS installer → `frontend/release/Tini Suite Setup 1.6.0.exe`
+Quy trình build tự động (`npm run build:electron` = `prepare:offline` → `tsc -b` → `vite build` → `electron-builder`):
+1. Tạo runtime Python embeddable 3.14 nếu chưa có (`python_runtime/`)
+2. Cài dependency theo hash-lock (`--require-hashes -r backend/requirements.lock.txt`)
+3. Tải model Docling/EasyOCR/translation vào `offline_models/` — bỏ qua nếu file đã đủ (idempotent)
+4. Chạy smoke test thật: import fastapi/docling/easyocr, dựng `DocumentConverter` thật, dịch thử một câu và kiểm tra công thức không bị mất
+5. Compile TypeScript, build renderer (Vite), đóng gói NSIS installer → `frontend/release/Tini Suite Setup 1.6.0.exe`
+
+### 📜 Bảng lệnh npm nhanh
+
+| Lệnh (`cd frontend` trước) | Dùng khi nào |
+|---|---|
+| `npm install` | Cài dependency frontend lần đầu / sau khi pull |
+| `npm run dev:electron` | Chạy dev mode (hot reload) |
+| `npm run lint` | Kiểm tra ESLint |
+| `npm run build` | Build TypeScript + Vite (không đóng gói installer) |
+| `npm run test:e2e` | Build rồi chạy Playwright E2E — xem [TESTING.md](TESTING.md) |
+| `npm run validate:offline` | Kiểm tra bundle offline hiện có mà không tải/cài lại gì |
+| `npm run prepare:offline` | Chỉ chạy bước chuẩn bị runtime/model offline (không build/đóng gói) |
+| `npm run build:electron` | Full pipeline → installer sản xuất tại `release/` |
 
 ---
 
@@ -296,6 +333,8 @@ Kiểm tra:
 - Sidebar collapse/expand, width persistence
 - IndexedDB autosave recovery
 
+Bộ test chạy **ứng dụng Electron thật**, gắn vào Tini Core thật — không mock. Để làm được vậy an toàn, mỗi lần chạy cách ly kép khỏi dữ liệu người dùng thật: cờ `--user-data-dir` (Electron/Chromium) cho lớp userData, và biến môi trường `DOCUMARK_APP_DATA_DIR` (tự định nghĩa) cho lớp dữ liệu/session của Tini Core — biến thứ hai này lan tự động xuống tận `DOCUMARK_DATA_DIR` của backend. Chi tiết đầy đủ, kèm trích dẫn code: [**TESTING.md**](TESTING.md).
+
 ---
 
 ## 📊 Trạng thái phát hành
@@ -375,7 +414,9 @@ Tini Suite được phát hành dưới license **MIT**. Xem [LICENSE](LICENSE) 
 ## 🔗 Liên kết nhanh
 
 - 📖 [Hướng dẫn sử dụng](docs/huong-dan-su-dung-v1.6.0.md)
-- 🏗️ [Kiến trúc hệ thống](docs/luong-hoat-dong-du-an.md)
+- 🔄 [Luồng hoạt động](docs/luong-hoat-dong-du-an.md)
+- 🏗️ [Kiến trúc hệ thống](.viepilot/ARCHITECTURE.md)
+- 🧪 [Testing / E2E](TESTING.md)
 - 🔐 [Bảo mật & SPEC](.viepilot/phases/phase-8-reliability-security-offline/SPEC.md)
 - 📝 [Changelog](CHANGELOG.md)
 - 🐛 [Issues](../../issues)
