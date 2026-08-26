@@ -30,6 +30,21 @@ function readJson<T>(filePath: string): T | null {
   }
 }
 
+/** Return whether a PID still belongs to a running process. */
+function isProcessAlive(pid: number): boolean {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    // Signal 0 never terminates the target; it only asks the OS whether the
+    // process exists and is accessible. This works on Windows and POSIX.
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    // An access-denied response still means the PID exists. All other errors
+    // (notably ESRCH) are treated as a stale process descriptor.
+    return (error as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
+
 function writeJsonAtomic(filePath: string, value: unknown) {
   const temporaryPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
   fs.writeFileSync(temporaryPath, JSON.stringify(value), { encoding: 'utf8', mode: 0o600, flag: 'wx' });
