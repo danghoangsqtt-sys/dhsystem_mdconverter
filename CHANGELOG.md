@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.1
+
+- Remove legacy Tini OCR and Tini Suite shortcuts during installation.
+
 ## 2.0.0
 
 - Removed the retired OCR product and all multi-product installer logic.
