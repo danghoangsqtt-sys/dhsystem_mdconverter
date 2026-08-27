@@ -360,7 +360,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                 </div>
                 <div>
                   <p className="font-bold text-gray-800 leading-tight">Mark Tini</p>
-                  <p className="text-[10px] text-gray-400">Phiên bản 1.6.0</p>
+                  <p className="text-[10px] text-gray-400">Phiên bản {window.documark?.appVersion ?? 'development'}</p>
                 </div>
               </div>
 

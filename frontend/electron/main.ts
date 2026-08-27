@@ -190,6 +190,7 @@ function createWindow() {
       additionalArguments: [
         `--documark-api-token=${API_TOKEN}`,
         `--product=${PRODUCT_ID}`,
+        `--app-version=${app.getVersion()}`,
       ],
     },
   });

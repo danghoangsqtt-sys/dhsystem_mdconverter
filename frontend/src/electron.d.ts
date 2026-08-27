@@ -8,6 +8,7 @@ declare global {
     documark?: {
       apiToken: string;
       productId: 'mark-tini' | 'tini-ocr';
+      appVersion: string;
       openExternal: (url: string) => Promise<void>;
       ensureOllama: () => Promise<'running' | 'started' | 'not_installed' | 'start_failed'>;
       saveWordFile: (

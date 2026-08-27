@@ -31,9 +31,16 @@ export function useUploadDeduplication() {
 
     const controller = new AbortController();
 
-    const promise = uploadFn(controller.signal).finally(() => {
-      pendingUploads.current.delete(key);
-    });
+    // Only clear the slot if it's still the entry we installed — a
+    // cancel-then-immediately-retry of the same file can otherwise let this
+    // stale cleanup delete a newer, still-in-flight entry for the same key.
+    const clearIfCurrent = () => {
+      if (pendingUploads.current.get(key)?.promise === promise) {
+        pendingUploads.current.delete(key);
+      }
+    };
+
+    const promise = uploadFn(controller.signal).finally(clearIfCurrent);
 
     const pending: PendingUpload = {
       promise,
@@ -45,7 +52,7 @@ export function useUploadDeduplication() {
     try {
       return await promise;
     } catch (err) {
-      pendingUploads.current.delete(key);
+      clearIfCurrent();
       throw err;
     }
   }, [getFileKey]);

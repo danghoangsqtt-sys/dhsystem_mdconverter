@@ -4,6 +4,8 @@ import { productIdFromArguments } from '../src/shared/product'
 const tokenArgument = process.argv.find(argument => argument.startsWith('--documark-api-token='))
 const apiToken = tokenArgument?.slice('--documark-api-token='.length) ?? ''
 const productId = productIdFromArguments(process.argv)
+const appVersionArgument = process.argv.find(argument => argument.startsWith('--app-version='))
+const appVersion = appVersionArgument?.slice('--app-version='.length) ?? 'development'
 
 // Purpose-named bridge so renderer code calls a specific API instead of
 // poking raw IPC channel strings (no generic ipcRenderer passthrough is
@@ -12,6 +14,7 @@ const productId = productIdFromArguments(process.argv)
 contextBridge.exposeInMainWorld('documark', {
   apiToken,
   productId,
+  appVersion,
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
   ensureOllama: () => ipcRenderer.invoke('ensure-ollama'),
   saveWordFile: (fileName: string, bytes: Uint8Array) => ipcRenderer.invoke('save-word-file', fileName, bytes),

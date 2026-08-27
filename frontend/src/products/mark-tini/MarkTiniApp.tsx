@@ -298,7 +298,13 @@ const MarkTiniApp: React.FC = () => {
   }, [addToast]);
 
   // Autosave hook
-  const { load: loadAutosaveRecord, save: saveAutosaveRecord } = useAutosave();
+  const handleAutosaveSuccess = useCallback(() => {
+    dispatch({ type: 'SET_SAVE_STATUS', payload: 'saved' });
+  }, []);
+  const handleAutosaveError = useCallback(() => {
+    addToast('info', 'Không thể lưu bản tự động; hãy tải file Markdown xuống để tránh mất dữ liệu.');
+  }, [addToast]);
+  const { load: loadAutosaveRecord, save: saveAutosaveRecord } = useAutosave(handleAutosaveSuccess, handleAutosaveError);
   // Upload deduplication
   const { executeWithDedup: executeUploadWithDedup } = useUploadDeduplication();
 

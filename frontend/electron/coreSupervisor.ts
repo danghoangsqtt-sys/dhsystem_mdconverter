@@ -2,6 +2,38 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
+import type { ProductId } from '../src/shared/product';
+
+type CoreSupervisorOptions = {
+  appDataDir: string;
+  legacyUserDataDir: string;
+  projectRoot: string;
+  productId: ProductId;
+  packaged: boolean;
+  appVersion: string;
+  log?: (...values: unknown[]) => void;
+};
+
+type CoreDescriptor = {
+  version: 1;
+  instanceId: string;
+  pid: number;
+  port: number;
+  token: string;
+  dataDir: string;
+  startedAt: string;
+  appVersion: string;
+};
+
+type CoreSession = Pick<CoreDescriptor, 'instanceId' | 'pid' | 'port' | 'token' | 'dataDir'>;
+
+type ClientLease = {
+  version: 1;
+  clientId: string;
+  pid: number;
+  productId: ProductId;
+  heartbeatAt: number;
+};
 
 const CORE_PORT = 8088;
 const HEALTH_TIMEOUT_MS = 1_500;
@@ -9,6 +41,10 @@ const START_TIMEOUT_MS = 90_000;
 const START_POLL_MS = 250;
 const LEASE_INTERVAL_MS = 5_000;
 const LEASE_STALE_MS = 20_000;
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, milliseconds));
+}
 
 // Clean up any stale startup lock on module load (e.g., from a previous crash)
 function cleanupStaleLockOnStartup(lockPath: string) {
