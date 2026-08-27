@@ -1,10 +1,10 @@
 {
-  "name": "tini-suite",
+  "name": "mark-tini",
   "private": true,
-  "version": "1.6.1",
+  "version": "2.0.0",
   "type": "module",
   "main": "dist-electron/main.cjs",
-  "description": "Tini Suite - Mark Tini Document Studio & Tini OCR Image to Text & Word",
+  "description": "Mark Tini - local document to Markdown and Word converter",
   "author": "DHSystem",
   "scripts": {
     "dev": "vite",
@@ -18,26 +18,25 @@
     "build:electron": "npm run prepare:offline && tsc -b && vite build && electron-builder"
   },
   "build": {
-    "appId": "com.dhsystem.tinisuite",
-    "productName": "Tini Suite",
-    "artifactName": "Tini Suite Setup ${version}.${ext}",
+    "appId": "com.dhsystem.marktini",
+    "productName": "Mark Tini",
+    "artifactName": "Mark Tini Setup ${version}.${ext}",
     "copyright": "Copyright © 2026 DHSystem",
     "asar": true,
     "win": {
       "target": [
         "nsis"
       ],
-      "icon": "build/icons/tini-suite.ico"
+      "icon": "build/icons/mark-tini.ico"
     },
     "nsis": {
-      "installerIcon": "build/icons/tini-suite.ico",
-      "uninstallerIcon": "build/icons/tini-suite.ico",
-      "include": "build/nsis/include.nsh",
+      "installerIcon": "build/icons/mark-tini.ico",
+      "uninstallerIcon": "build/icons/mark-tini.ico",
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": false,
-      "createStartMenuShortcut": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
       "deleteAppDataOnUninstall": false
     },
     "files": [
@@ -72,10 +71,6 @@
       {
         "from": "build/icons/mark-tini.ico",
         "to": "mark-tini.ico"
-      },
-      {
-        "from": "build/icons/tini-ocr.ico",
-        "to": "tini-ocr.ico"
       }
     ],
     "directories": {

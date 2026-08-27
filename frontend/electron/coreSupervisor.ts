@@ -1,14 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
-import type { ProductId } from '../src/shared/product';
 
 type CoreSupervisorOptions = {
   appDataDir: string;
   legacyUserDataDir: string;
   projectRoot: string;
-  productId: ProductId;
   packaged: boolean;
   appVersion: string;
   log?: (...values: unknown[]) => void;
@@ -31,7 +29,6 @@ type ClientLease = {
   version: 1;
   clientId: string;
   pid: number;
-  productId: ProductId;
   heartbeatAt: number;
 };
 
@@ -44,6 +41,20 @@ const LEASE_STALE_MS = 20_000;
 
 function delay(milliseconds: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, milliseconds));
+}
+
+// Runs a short-lived helper process off the main thread's event loop.
+// spawnSync would block Electron's entire UI (window paint, IPC) for the
+// call's duration; netstat/taskkill can take a non-trivial and variable
+// amount of time depending on system load, so they must never be sync.
+function spawnCollect(command: string, args: string[]): Promise<{ status: number | null; stdout: string }> {
+  return new Promise(resolve => {
+    const child = spawn(command, args, { windowsHide: true });
+    let stdout = '';
+    child.stdout?.on('data', (chunk: Buffer) => { stdout += chunk.toString('utf8'); });
+    child.once('error', () => resolve({ status: null, stdout: '' }));
+    child.once('close', status => resolve({ status, stdout }));
+  });
 }
 
 // Clean up any stale startup lock on module load (e.g., from a previous crash)
@@ -121,9 +132,9 @@ function copyDirectoryMissing(sourceDir: string, destinationDir: string) {
   }
 }
 
-export class TiniCoreSupervisor {
+export class MarkTiniCoreSupervisor {
   private readonly options: CoreSupervisorOptions;
-  private readonly suiteRoot: string;
+  private readonly appRoot: string;
   private readonly coreRoot: string;
   private readonly clientsDir: string;
   private readonly descriptorPath: string;
@@ -138,12 +149,12 @@ export class TiniCoreSupervisor {
 
   constructor(options: CoreSupervisorOptions) {
     this.options = options;
-    this.suiteRoot = path.join(options.appDataDir, 'Tini Suite');
-    this.coreRoot = path.join(this.suiteRoot, 'core');
+    this.appRoot = path.join(options.appDataDir, 'Mark Tini');
+    this.coreRoot = path.join(this.appRoot, 'core');
     this.clientsDir = path.join(this.coreRoot, 'clients');
     this.descriptorPath = path.join(this.coreRoot, 'session.json');
     this.lockPath = path.join(this.coreRoot, 'startup.lock');
-    this.dataDir = path.join(this.suiteRoot, 'data');
+    this.dataDir = path.join(this.appRoot, 'data');
     this.leasePath = path.join(this.clientsDir, `${this.clientId}.json`);
     // Clean up any stale lock file from a previous crash
     cleanupStaleLockOnStartup(this.lockPath);
@@ -173,7 +184,7 @@ export class TiniCoreSupervisor {
 
     const current = readJson<CoreDescriptor>(this.descriptorPath);
     if (!current || current.instanceId !== this.session.instanceId) return;
-    if (await this.isHealthy(current)) this.stopProcess(current.pid);
+    if (await this.isHealthy(current)) await this.stopProcess(current.pid);
     try { fs.unlinkSync(this.descriptorPath); } catch { /* stale/removed */ }
     try { fs.unlinkSync(this.lockPath); } catch { /* stale/removed */ }
   }
@@ -202,7 +213,7 @@ export class TiniCoreSupervisor {
             // mismatch left over from a previous install) — stopProcess
             // no-ops if it already died, so this is safe either way, and
             // it guarantees startCore() below gets the port free.
-            this.stopProcess(rechecked.pid);
+            await this.stopProcess(rechecked.pid);
             try { fs.unlinkSync(this.descriptorPath); } catch { /* stale */ }
           }
           return await this.startCore();
@@ -216,7 +227,7 @@ export class TiniCoreSupervisor {
       const attached = await this.waitForDescriptor(START_TIMEOUT_MS);
       if (attached) return attached;
     }
-    throw new Error('Tini Core không thể khởi động hoặc attach trong thời gian cho phép.');
+    throw new Error('Mark Tini Core không thể khởi động hoặc attach trong thời gian cho phép.');
   }
 
   private tryAcquireStartupLock(): number | null {
@@ -262,7 +273,7 @@ export class TiniCoreSupervisor {
     if (!pythonExe) throw new Error(`Không tìm thấy Python runtime: ${pythonCandidates.join(', ')}`);
 
     const runServerScript = path.join(this.options.projectRoot, 'backend', 'run_server.py');
-    if (!fs.existsSync(runServerScript)) throw new Error(`Không tìm thấy Tini Core: ${runServerScript}`);
+    if (!fs.existsSync(runServerScript)) throw new Error(`Không tìm thấy Mark Tini Core: ${runServerScript}`);
     const offlineModelsPath = path.join(this.options.projectRoot, 'offline_models');
     if (this.options.packaged && !fs.existsSync(offlineModelsPath)) {
       throw new Error(`Không tìm thấy model offline: ${offlineModelsPath}`);
@@ -271,7 +282,7 @@ export class TiniCoreSupervisor {
     // Installer upgrades remove the session descriptor so new code never
     // attaches to stale code. The old detached Python process can still hold
     // this application's private localhost port, so reclaim it before spawn.
-    this.stopCorePortOccupant();
+    await this.stopCorePortOccupant();
 
     const environment: NodeJS.ProcessEnv = {
       ...process.env,
@@ -296,7 +307,7 @@ export class TiniCoreSupervisor {
     });
     await this.waitForSpawn(child);
     child.unref();
-    if (!child.pid) throw new Error('Tini Core không trả PID sau khi spawn.');
+    if (!child.pid) throw new Error('Mark Tini Core không trả PID sau khi spawn.');
 
     const descriptor: CoreDescriptor = {
       version: 1,
@@ -311,11 +322,11 @@ export class TiniCoreSupervisor {
     writeJsonAtomic(this.descriptorPath, descriptor);
     const attached = await this.waitForDescriptor(START_TIMEOUT_MS);
     if (!attached) {
-      this.stopProcess(child.pid);
+      await this.stopProcess(child.pid);
       try { fs.unlinkSync(this.descriptorPath); } catch { /* cleanup */ }
-      throw new Error('Tini Core đã spawn nhưng health check không sẵn sàng.');
+      throw new Error('Mark Tini Core đã spawn nhưng health check không sẵn sàng.');
     }
-    this.options.log?.(`[Tini Core] Started PID ${child.pid}`);
+    this.options.log?.(`[Mark Tini Core] Started PID ${child.pid}`);
     return attached;
   }
 
@@ -324,7 +335,7 @@ export class TiniCoreSupervisor {
     this.maintenanceRunning = true;
     try {
       if (await this.isHealthy(this.session)) return;
-      this.options.log?.(`[Tini Core] Lost PID ${this.session.pid}; attempting recovery`);
+      this.options.log?.(`[Mark Tini Core] Lost PID ${this.session.pid}; attempting recovery`);
 
       const lockHandle = this.tryAcquireStartupLock();
       if (lockHandle !== null) {
@@ -339,7 +350,7 @@ export class TiniCoreSupervisor {
           // and not answering /api/health) — stop it before restarting so
           // the replacement isn't left trying to bind an already-occupied
           // CORE_PORT. stopProcess no-ops if it's already dead.
-          this.stopProcess(this.session.pid);
+          await this.stopProcess(this.session.pid);
           this.session = await this.startCore(this.session);
         } finally {
           fs.closeSync(lockHandle);
@@ -352,7 +363,7 @@ export class TiniCoreSupervisor {
       const attached = await this.waitForDescriptor(START_TIMEOUT_MS);
       if (attached && attached.token === this.session.token) this.session = attached;
     } catch (error) {
-      this.options.log?.(`[Tini Core] Recovery failed: ${error instanceof Error ? error.message : error}`);
+      this.options.log?.(`[Mark Tini Core] Recovery failed: ${error instanceof Error ? error.message : error}`);
     } finally {
       this.maintenanceRunning = false;
     }
@@ -390,7 +401,6 @@ export class TiniCoreSupervisor {
       version: 1,
       clientId: this.clientId,
       pid: process.pid,
-      productId: this.options.productId,
       heartbeatAt: Date.now(),
     };
     writeJsonAtomic(this.leasePath, lease);
@@ -418,26 +428,23 @@ export class TiniCoreSupervisor {
       ));
   }
 
-  private stopProcess(pid: number) {
+  private async stopProcess(pid: number): Promise<void> {
     if (!isProcessAlive(pid)) return;
     if (process.platform === 'win32') {
-      spawnSync('taskkill', ['/pid', String(pid), '/f', '/t'], { windowsHide: true, stdio: 'ignore' });
+      await spawnCollect('taskkill', ['/pid', String(pid), '/f', '/t']);
     } else {
       try { process.kill(pid, 'SIGTERM'); } catch { /* already stopped */ }
     }
   }
 
-  private stopCorePortOccupant() {
+  private async stopCorePortOccupant(): Promise<void> {
     if (process.platform !== 'win32') return;
-    const result = spawnSync('netstat', ['-ano', '-p', 'tcp'], {
-      windowsHide: true,
-      encoding: 'utf8',
-    });
+    const result = await spawnCollect('netstat', ['-ano', '-p', 'tcp']);
     if (result.status !== 0 || !result.stdout) return;
 
     for (const line of result.stdout.split(/\r?\n/)) {
       const match = line.match(new RegExp(`^\\s*TCP\\s+\\S+:${CORE_PORT}\\s+\\S+\\s+LISTENING\\s+(\\d+)\\s*$`, 'i'));
-      if (match) this.stopProcess(Number(match[1]));
+      if (match) await this.stopProcess(Number(match[1]));
     }
   }
 

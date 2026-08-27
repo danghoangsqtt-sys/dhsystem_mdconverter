@@ -2,12 +2,10 @@ import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import path from 'node:path';
 import { spawn, ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
-import { PRODUCT_METADATA, productIdFromArguments } from '../src/shared/product';
-import { TiniCoreSupervisor } from './coreSupervisor';
+import { PRODUCT } from '../src/shared/product';
+import { MarkTiniCoreSupervisor } from './coreSupervisor';
 
 let API_TOKEN = '';
-const PRODUCT_ID = productIdFromArguments(process.argv);
-const PRODUCT = PRODUCT_METADATA[PRODUCT_ID];
 
 // ─── Global EPIPE Guard ────────────────────────────────────────
 // In packaged mode there is no console attached. Writing to
@@ -105,7 +103,7 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL
 
 let win: BrowserWindow | null;
 let ollamaProcess: ChildProcess | null = null;
-let coreSupervisor: TiniCoreSupervisor | null = null;
+let coreSupervisor: MarkTiniCoreSupervisor | null = null;
 let shutdownStarted = false;
 
 // Safe logging helper — never throws even if stdout/stderr is broken
@@ -189,7 +187,6 @@ function createWindow() {
       sandbox: true,
       additionalArguments: [
         `--documark-api-token=${API_TOKEN}`,
-        `--product=${PRODUCT_ID}`,
         `--app-version=${app.getVersion()}`,
       ],
     },
@@ -212,14 +209,10 @@ function createWindow() {
   });
 
   if (VITE_DEV_SERVER_URL) {
-    const rendererUrl = new URL(VITE_DEV_SERVER_URL);
-    rendererUrl.searchParams.set('product', PRODUCT_ID);
-    win.loadURL(rendererUrl.toString());
+    win.loadURL(VITE_DEV_SERVER_URL);
     win.webContents.openDevTools();
   } else {
-    win.loadFile(path.join(RENDERER_DIST, 'index.html'), {
-      query: { product: PRODUCT_ID },
-    });
+    win.loadFile(path.join(RENDERER_DIST, 'index.html'));
   }
 }
 
@@ -300,7 +293,7 @@ ipcMain.handle(
 
     const owner = BrowserWindow.fromWebContents(event.sender);
     const options = {
-      title: 'Lưu kết quả Tini OCR',
+      title: 'Lưu tệp xuất',
       defaultPath: path.join(app.getPath('documents'), safeName),
       filters: [filters[extension]],
     };
@@ -332,7 +325,7 @@ async function shutdownApplication() {
   try {
     await coreSupervisor?.dispose();
   } catch (error) {
-    safeLog(`[Tini Core] Shutdown failed: ${error instanceof Error ? error.message : error}`);
+    safeLog(`[Mark Tini Core] Shutdown failed: ${error instanceof Error ? error.message : error}`);
   }
 
   coreSupervisor = null;
@@ -359,15 +352,14 @@ app.on('activate', () => {
 
 app.whenReady().then(async () => {
   app.setAppUserModelId(PRODUCT.appUserModelId);
-  coreSupervisor = new TiniCoreSupervisor({
+  coreSupervisor = new MarkTiniCoreSupervisor({
     // Override hook for e2e tests only (see frontend/e2e/testUserData.ts) -
-    // redirects the "Tini Suite" data/session root away from the real
-    // %APPDATA%\Tini Suite profile. Unset in dev and packaged builds, so
+    // redirects the Mark Tini data/session root away from the real
+    // %APPDATA%\Mark Tini profile. Unset in dev and packaged builds, so
     // app.getPath('appData') is used exactly as before.
     appDataDir: process.env.DOCUMARK_APP_DATA_DIR || app.getPath('appData'),
     legacyUserDataDir: app.getPath('userData'),
     projectRoot: PROJECT_ROOT,
-    productId: PRODUCT_ID,
     packaged: app.isPackaged,
     appVersion: app.getVersion(),
     log: safeLog,
@@ -380,8 +372,8 @@ app.whenReady().then(async () => {
   } catch (error) {
     shutdownStarted = true;
     const message = error instanceof Error ? error.message : String(error);
-    safeLog(`[Tini Core] Startup failed: ${message}`);
-    dialog.showErrorBox(`${PRODUCT.name} - Tini Core`, message);
+    safeLog(`[Mark Tini Core] Startup failed: ${message}`);
+    dialog.showErrorBox(`${PRODUCT.name} - Core`, message);
     app.exit(1);
     return;
   }

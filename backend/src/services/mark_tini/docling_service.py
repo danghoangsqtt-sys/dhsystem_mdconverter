@@ -57,7 +57,7 @@ def _build_converter(lang_key: str, table_mode_key: str) -> Any:
     # load used to delay Uvicorn from opening the health endpoint for more
     # than 90 seconds on a cold packaged start.  Keep the import behind the
     # background warm-up/first-conversion boundary so the desktop shell can
-    # attach to Tini Core immediately and display real model-loading progress.
+    # attach to Mark Tini Core immediately and display real model-loading progress.
     from docling.document_converter import DocumentConverter, PdfFormatOption, WordFormatOption
     from docling.datamodel.accelerator_options import AcceleratorDevice, AcceleratorOptions
     from docling.datamodel.base_models import InputFormat

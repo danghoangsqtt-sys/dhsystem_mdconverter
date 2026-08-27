@@ -7,7 +7,7 @@ declare global {
     // must fall back to window.open when this is undefined.
     documark?: {
       apiToken: string;
-      productId: 'mark-tini' | 'tini-ocr';
+      productId: 'mark-tini';
       appVersion: string;
       openExternal: (url: string) => Promise<void>;
       ensureOllama: () => Promise<'running' | 'started' | 'not_installed' | 'start_failed'>;

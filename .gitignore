@@ -2,6 +2,7 @@
 frontend/dist/
 frontend/dist-electron/
 frontend/release/
+frontend/dist_old/
 dist-electron/
 
 # One-off / manual electron-builder output and backup snapshots created

@@ -142,31 +142,6 @@ class ApiSecurityTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 401)
 
-    def test_image_ocr_requires_session_token(self) -> None:
-        response = self.client.post(
-            "/api/ocr/jobs",
-            files={"files": ("photo.png", b"not trusted", "image/png")},
-        )
-        self.assertEqual(response.status_code, 401)
-
-    def test_image_ocr_rejects_mismatched_magic_and_cleans_upload(self) -> None:
-        before = set(main.settings.upload_dir.glob("*"))
-        response = self.client.post(
-            "/api/ocr/jobs",
-            headers=self.auth,
-            files={"files": ("photo.png", b"not a png", "image/png")},
-        )
-        self.assertEqual(response.status_code, 415)
-        self.assertEqual(before, set(main.settings.upload_dir.glob("*")))
-
-    def test_image_ocr_rejects_document_formats(self) -> None:
-        response = self.client.post(
-            "/api/ocr/jobs",
-            headers=self.auth,
-            files={"files": ("paper.pdf", b"%PDF-1.4", "application/pdf")},
-        )
-        self.assertEqual(response.status_code, 415)
-
     def test_editable_word_export_contains_native_text_and_cleans_output(self) -> None:
         docx_before = set(main.settings.output_dir.glob("*.docx"))
         response = self.client.post(

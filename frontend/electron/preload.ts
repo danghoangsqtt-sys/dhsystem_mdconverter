@@ -1,9 +1,8 @@
 import { ipcRenderer, contextBridge } from 'electron'
-import { productIdFromArguments } from '../src/shared/product'
+import { PRODUCT_ID } from '../src/shared/product'
 
 const tokenArgument = process.argv.find(argument => argument.startsWith('--documark-api-token='))
 const apiToken = tokenArgument?.slice('--documark-api-token='.length) ?? ''
-const productId = productIdFromArguments(process.argv)
 const appVersionArgument = process.argv.find(argument => argument.startsWith('--app-version='))
 const appVersion = appVersionArgument?.slice('--app-version='.length) ?? 'development'
 
@@ -13,7 +12,7 @@ const appVersion = appVersionArgument?.slice('--app-version='.length) ?? 'develo
 // for the 'open-external' handler.
 contextBridge.exposeInMainWorld('documark', {
   apiToken,
-  productId,
+  productId: PRODUCT_ID,
   appVersion,
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
   ensureOllama: () => ipcRenderer.invoke('ensure-ollama'),

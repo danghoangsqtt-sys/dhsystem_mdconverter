@@ -1,4 +1,4 @@
-"""Shared direct EasyOCR reader used by Mark Tini's region crops and Tini OCR."""
+"""Direct EasyOCR reader used by Mark Tini's region crops."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ _region_reader_lock = threading.RLock()
 
 
 def get_region_reader(lang_key: str = DEFAULT_OCR_LANG) -> Any:
-    """Return the shared direct EasyOCR reader used by crops and Tini OCR."""
+    """Return the cached direct EasyOCR reader used by region crops."""
     if lang_key not in OCR_LANG_PRESETS:
         lang_key = DEFAULT_OCR_LANG
     with _region_reader_lock:

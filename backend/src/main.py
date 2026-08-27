@@ -16,8 +16,6 @@ from .services.mark_tini import history_service
 from .services.mark_tini.docling_service import warm_up_models
 from .services.mark_tini.job_service import JobCapacityError  # noqa: F401 - re-exported for tests
 from .services.mark_tini.router import job_manager, router as mark_tini_router
-from .services.tini_ocr.router import router as tini_ocr_router
-from .services.tini_ocr.image_ocr_service import warmup_image_ocr
 
 
 configure_logging(settings.log_dir, level=settings.log_level)
@@ -91,7 +89,6 @@ async def lifespan(_: FastAPI):
     await asyncio.to_thread(_cleanup_orphaned_originals)
     await job_manager.start()
     threading.Thread(target=warm_up_models, daemon=True).start()
-    threading.Thread(target=warmup_image_ocr, daemon=True).start()
     try:
         yield
     finally:
@@ -139,7 +136,6 @@ def get_session(request: Request) -> dict[str, str]:
 
 
 app.include_router(mark_tini_router, dependencies=[Depends(_require_api_token)])
-app.include_router(tini_ocr_router, dependencies=[Depends(_require_api_token)])
 
 if settings.frontend_dist_dir.is_dir():
     app.mount("/", StaticFiles(directory=settings.frontend_dist_dir, html=True), name="frontend")
